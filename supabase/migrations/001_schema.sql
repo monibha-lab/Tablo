@@ -379,25 +379,25 @@ ALTER TABLE holidays ENABLE ROW LEVEL SECURITY;
 
 -- schools: admins can manage, authenticated users can read their school
 CREATE POLICY "admins_manage_schools" ON schools
-  FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+  FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 CREATE POLICY "authenticated_read_schools" ON schools
   FOR SELECT USING (auth.role() = 'authenticated');
 
 -- teachers: own row readable/updatable by matching user_id; admin manages all
 CREATE POLICY "teachers_read_own" ON teachers
-  FOR SELECT USING (user_id = auth.uid() OR auth.jwt() ->> 'role' = 'admin');
+  FOR SELECT USING (user_id = auth.uid() OR auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 CREATE POLICY "teachers_update_own" ON teachers
-  FOR UPDATE USING (user_id = auth.uid() OR auth.jwt() ->> 'role' = 'admin');
+  FOR UPDATE USING (user_id = auth.uid() OR auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 CREATE POLICY "admins_insert_teachers" ON teachers
-  FOR INSERT WITH CHECK (auth.jwt() ->> 'role' = 'admin');
+  FOR INSERT WITH CHECK (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 CREATE POLICY "admins_delete_teachers" ON teachers
-  FOR DELETE USING (auth.jwt() ->> 'role' = 'admin');
+  FOR DELETE USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 -- timetable_slots: readable by authenticated, writable by admin
 CREATE POLICY "authenticated_read_slots" ON timetable_slots
   FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "admins_write_slots" ON timetable_slots
-  FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+  FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 -- notifications: users read/update only their own
 CREATE POLICY "users_own_notifications" ON notifications
@@ -413,12 +413,12 @@ CREATE POLICY "authenticated_read_sub_requests" ON substitution_requests
 CREATE POLICY "teachers_insert_sub_requests" ON substitution_requests
   FOR INSERT WITH CHECK (
     auth.role() = 'authenticated' AND (
-      auth.jwt() ->> 'role' = 'admin' OR
+      auth.jwt() -> 'user_metadata' ->> 'role' = 'admin' OR
       absent_teacher_id IN (SELECT id FROM teachers WHERE user_id = auth.uid())
     )
   );
 CREATE POLICY "admins_update_sub_requests" ON substitution_requests
-  FOR UPDATE USING (auth.jwt() ->> 'role' = 'admin');
+  FOR UPDATE USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 -- substitution_assignments: insertable by any teacher, updatable by same or admin
 CREATE POLICY "authenticated_read_sub_assignments" ON substitution_assignments
@@ -427,64 +427,64 @@ CREATE POLICY "teachers_insert_sub_assignments" ON substitution_assignments
   FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 CREATE POLICY "teachers_update_own_assignment" ON substitution_assignments
   FOR UPDATE USING (
-    auth.jwt() ->> 'role' = 'admin' OR
+    auth.jwt() -> 'user_metadata' ->> 'role' = 'admin' OR
     substitute_teacher_id IN (SELECT id FROM teachers WHERE user_id = auth.uid())
   );
 
 -- Generic read policies for all other tables (authenticated school members)
 CREATE POLICY "authenticated_read_terms" ON terms FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_terms" ON terms FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_terms" ON terms FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_bell_schedules" ON bell_schedules FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_bell_schedules" ON bell_schedules FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_bell_schedules" ON bell_schedules FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_period_slots" ON period_slots FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_period_slots" ON period_slots FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_period_slots" ON period_slots FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_rooms" ON rooms FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_rooms" ON rooms FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_rooms" ON rooms FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_subjects" ON subjects FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_subjects" ON subjects FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_subjects" ON subjects FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_grades" ON grades FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_grades" ON grades FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_grades" ON grades FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_sections" ON sections FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_sections" ON sections FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_sections" ON sections FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_teacher_subjects" ON teacher_subjects FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_teacher_subjects" ON teacher_subjects FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_teacher_subjects" ON teacher_subjects FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_section_subjects" ON section_subjects FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_section_subjects" ON section_subjects FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_section_subjects" ON section_subjects FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_fixed_periods" ON fixed_periods FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_fixed_periods" ON fixed_periods FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_fixed_periods" ON fixed_periods FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_combined_classes" ON combined_classes FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_combined_classes" ON combined_classes FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_combined_classes" ON combined_classes FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_combined_class_sections" ON combined_class_sections FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_combined_class_sections" ON combined_class_sections FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_combined_class_sections" ON combined_class_sections FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_elective_blocks" ON elective_blocks FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_elective_blocks" ON elective_blocks FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_elective_blocks" ON elective_blocks FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_elective_offerings" ON elective_offerings FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_elective_offerings" ON elective_offerings FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_elective_offerings" ON elective_offerings FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_elective_enrollments" ON elective_enrollments FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_elective_enrollments" ON elective_enrollments FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_elective_enrollments" ON elective_enrollments FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_timetables" ON timetables FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_timetables" ON timetables FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_timetables" ON timetables FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_teacher_absences" ON teacher_absences FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "teachers_insert_absences" ON teacher_absences
   FOR INSERT WITH CHECK (
     auth.role() = 'authenticated' AND (
-      auth.jwt() ->> 'role' = 'admin' OR
+      auth.jwt() -> 'user_metadata' ->> 'role' = 'admin' OR
       teacher_id IN (SELECT id FROM teachers WHERE user_id = auth.uid())
     )
   );
@@ -494,19 +494,19 @@ CREATE POLICY "teachers_insert_period_unavailabilities" ON period_unavailabiliti
   FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 
 CREATE POLICY "authenticated_read_admin_events" ON admin_events FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_admin_events" ON admin_events FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_admin_events" ON admin_events FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_admin_event_sections" ON admin_event_sections FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_admin_event_sections" ON admin_event_sections FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_admin_event_sections" ON admin_event_sections FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_timetable_edits" ON timetable_edits FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "admins_write_timetable_edits" ON timetable_edits FOR ALL USING (auth.role() = 'authenticated');
 
 CREATE POLICY "authenticated_read_timetable_snapshots" ON timetable_snapshots FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_timetable_snapshots" ON timetable_snapshots FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_timetable_snapshots" ON timetable_snapshots FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "public_read_share_links" ON share_links FOR SELECT USING (true);
-CREATE POLICY "admins_write_share_links" ON share_links FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_share_links" ON share_links FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 CREATE POLICY "authenticated_read_holidays" ON holidays FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "admins_write_holidays" ON holidays FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "admins_write_holidays" ON holidays FOR ALL USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
