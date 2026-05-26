@@ -1,26 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:wght@300;400;500&display=swap');
 @import "tailwindcss";
 
+@theme {
+  --color-ivory: #FAF8F4;
+  --color-ivory-dark: #F3F0EA;
+  --color-cream: #F5F1E8;
+  --color-cream-dark: #EDE8DC;
+  --color-sand: #E8E0D0;
+  --color-sand-dark: #DDD4C0;
+  --color-nude: #D4C8B0;
+  --color-nude-dark: #C4B49A;
+  --color-taupe: #B8A898;
+  --color-taupe-dark: #A89880;
+  --color-clay: #9C8878;
+  --color-clay-dark: #8C7868;
+  --color-mocha: #5C4A3A;
+  --color-mocha-dark: #4A3828;
+  --color-espresso: #3A2A1E;
+  --color-espresso-dark: #2C1E14;
+  --color-blush: #E8D8CC;
+  --color-champagne: #F0E4CC;
+
+  --font-cormorant: 'Cormorant Garamond', serif;
+  --font-sans: 'DM Sans', sans-serif;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: #FAF8F4;
+  --foreground: #3A2A1E;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+h1, h2, h3 {
+  font-family: var(--font-cormorant);
+  letter-spacing: -0.01em;
 }
