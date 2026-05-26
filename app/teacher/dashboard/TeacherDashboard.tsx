@@ -6,26 +6,27 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { SlidePanel } from '@/components/ui/SlidePanel'
 import { Textarea } from '@/components/ui/Textarea'
-import { createClient } from '@/lib/supabase/client'
+import { markAbsent } from '@/app/actions/substitution'
 import { useToast } from '@/hooks/useToast'
 import type { Teacher, TimetableSlot, PeriodSlot } from '@/types'
 
+type EnrichedSlot = TimetableSlot & {
+  subjects: { name: string; color_hex: string } | null
+  sections: { name: string; grades: { name: string } | null } | null
+  rooms: { name: string } | null
+}
+
 interface TeacherDashboardProps {
   teacher: Teacher
-  todaySlots: (TimetableSlot & {
-    subjects: { name: string; color_hex: string } | null
-    sections: { name: string; grades: { name: string } | null } | null
-    rooms: { name: string } | null
-  })[]
+  todaySlots: EnrichedSlot[]
   periodSlots: PeriodSlot[]
   today: string
 }
 
 export function TeacherDashboard({ teacher, todaySlots, periodSlots, today }: TeacherDashboardProps) {
-  const [unavailableSlot, setUnavailableSlot] = useState<TimetableSlot | null>(null)
+  const [unavailableSlot, setUnavailableSlot] = useState<EnrichedSlot | null>(null)
   const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const supabase = createClient()
   const { toast } = useToast()
 
   function getPeriodSlot(slotNumber: number) {
@@ -35,16 +36,16 @@ export function TeacherDashboard({ teacher, todaySlots, periodSlots, today }: Te
   async function handleMarkUnavailable() {
     if (!unavailableSlot) return
     setSubmitting(true)
-    const today = new Date().toISOString().split('T')[0]
+    const dateStr = new Date().toISOString().split('T')[0]
 
-    await supabase.from('period_unavailabilities').insert({
-      teacher_id: teacher.id,
-      timetable_slot_id: unavailableSlot.id,
-      date: today,
-      note_for_sub: note || null,
-    })
+    const result = await markAbsent(teacher.id, dateStr, note || undefined)
 
-    toast({ variant: 'success', title: 'Marked as unavailable', description: 'A sub request has been created.' })
+    if (result?.error) {
+      toast({ variant: 'error', title: 'Failed to submit', description: result.error })
+    } else {
+      toast({ variant: 'success', title: 'Marked as unavailable', description: 'A substitute request has been created for your classes.' })
+    }
+
     setUnavailableSlot(null)
     setNote('')
     setSubmitting(false)
@@ -116,8 +117,13 @@ export function TeacherDashboard({ teacher, todaySlots, periodSlots, today }: Te
         <div className="space-y-4">
           {unavailableSlot && (
             <div className="bg-cream rounded-xl p-3">
-              <p className="text-sm font-medium text-espresso">{unavailableSlot.subject_id}</p>
-              <p className="text-xs text-taupe">Period {unavailableSlot.slot_number}</p>
+              <p className="text-sm font-medium text-espresso">
+                {unavailableSlot.subjects?.name ?? 'Period'} — Period {unavailableSlot.slot_number}
+              </p>
+              <p className="text-xs text-taupe">
+                {(unavailableSlot.sections?.grades as unknown as { name: string })?.name}{' '}
+                {unavailableSlot.sections?.name}
+              </p>
             </div>
           )}
           <Textarea

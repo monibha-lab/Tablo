@@ -15,7 +15,7 @@ export async function GET(
 
   const { data: link } = await supabase
     .from('share_links')
-    .select('*, sections(name, grades(name)), timetables(*, terms(start_date, end_date, name))')
+    .select('*, sections(name, grades(name)), timetables(*, terms(start_date, end_date, name), bell_schedule_id)')
     .eq('token', token)
     .single()
 
@@ -23,17 +23,34 @@ export async function GET(
     return new NextResponse('Link expired', { status: 404 })
   }
 
-  const { data: slots } = await supabase
-    .from('timetable_slots')
-    .select('*, subjects(name), rooms(name), period_slots:slot_number(start_time, end_time)')
-    .eq('timetable_id', link.timetable_id)
-    .eq('section_id', link.section_id)
-    .not('subject_id', 'is', null)
-
   const timetable = link.timetables as unknown as {
     terms: { start_date: string; end_date: string; name: string } | null
     label: string
+    bell_schedule_id: string | null
   }
+
+  // Fetch slots and period times separately
+  const [{ data: slots }, { data: periodSlots }] = await Promise.all([
+    supabase
+      .from('timetable_slots')
+      .select('*, subjects(name), rooms(name)')
+      .eq('timetable_id', link.timetable_id)
+      .eq('section_id', link.section_id)
+      .not('subject_id', 'is', null),
+    timetable.bell_schedule_id
+      ? supabase
+          .from('period_slots')
+          .select('slot_number, start_time, end_time')
+          .eq('bell_schedule_id', timetable.bell_schedule_id)
+          .eq('is_break', false)
+          .order('slot_number')
+      : Promise.resolve({ data: [] }),
+  ])
+
+  const periodTimeMap = new Map(
+    (periodSlots ?? []).map((p) => [p.slot_number, { start: p.start_time, end: p.end_time }])
+  )
+
   const termStart = timetable?.terms?.start_date ?? format(new Date(), 'yyyy-MM-dd')
   const termEnd = timetable?.terms?.end_date ?? format(addWeeks(new Date(), 16), 'yyyy-MM-dd')
 
@@ -51,15 +68,18 @@ export async function GET(
     const room = (slot.rooms as unknown as { name: string })?.name
     const dayStr = DAY_MAP[slot.day_of_week] ?? 'MO'
     const uid = `${slot.id}@tablo.app`
-    const dtStart = `DTSTART:${termStart.replace(/-/g, '')}T${('08:00').replace(':', '')}00`
-    const dtEnd = `DTEND:${termStart.replace(/-/g, '')}T${('08:45').replace(':', '')}00`
+    const dateStr = termStart.replace(/-/g, '')
     const until = termEnd.replace(/-/g, '') + 'T235959Z'
+
+    const times = periodTimeMap.get(slot.slot_number)
+    const startTime = times?.start ? times.start.replace(':', '').slice(0, 4) + '00' : '080000'
+    const endTime = times?.end ? times.end.replace(':', '').slice(0, 4) + '00' : '084500'
 
     lines.push(
       'BEGIN:VEVENT',
       `UID:${uid}`,
-      dtStart,
-      dtEnd,
+      `DTSTART:${dateStr}T${startTime}`,
+      `DTEND:${dateStr}T${endTime}`,
       `RRULE:FREQ=WEEKLY;BYDAY=${dayStr};UNTIL=${until}`,
       `SUMMARY:${subject}`,
       room ? `LOCATION:${room}` : '',

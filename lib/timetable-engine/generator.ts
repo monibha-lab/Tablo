@@ -21,6 +21,8 @@ export async function generateTimetable(
     { data: combinedClassSections },
     { data: electiveBlocks },
     { data: electiveEnrollments },
+    { data: teacherSubjects },
+    { data: rooms },
   ] = await Promise.all([
     supabase
       .from('sections')
@@ -28,7 +30,8 @@ export async function generateTimetable(
       .eq('grades.school_id', schoolId),
     supabase
       .from('section_subjects')
-      .select('*'),
+      .select('*')
+      .in('section_id', (await supabase.from('sections').select('id').eq('grades.school_id', schoolId).select('id')).data?.map(s => s.id) ?? []),
     supabase
       .from('fixed_periods')
       .select('*')
@@ -56,6 +59,14 @@ export async function generateTimetable(
     supabase
       .from('elective_enrollments')
       .select('*'),
+    supabase
+      .from('teacher_subjects')
+      .select('*')
+      .eq('school_id', schoolId),
+    supabase
+      .from('rooms')
+      .select('*')
+      .eq('school_id', schoolId),
   ])
 
   const periodsPerDay = bellSchedule?.periods_per_day ?? 8
@@ -199,14 +210,33 @@ export async function generateTimetable(
 
         if (!bestSubjectId) continue
 
-        // Find available teacher for this subject in this section
-        const subjectData = subjectsForSection.find((ss) => ss.subject_id === bestSubjectId)
-        const teacherId: string | null = null
+        // Find available teacher for this subject
+        const eligibleTeacherIds = (teacherSubjects ?? [])
+          .filter((ts) => ts.subject_id === bestSubjectId)
+          .map((ts) => ts.teacher_id as string)
+
+        let teacherId: string | null = null
+        for (const tid of eligibleTeacherIds) {
+          if (isTeacherAvailable(tid, day, slot)) {
+            teacherId = tid
+            incTeacherLoad(tid, `${day}`)
+            break
+          }
+        }
+
+        // Find an available room for this slot
+        const bookedRoomIds = new Set(
+          sectionIds
+            .map((sid) => grid[sid]?.[day]?.[slot]?.roomId)
+            .filter(Boolean)
+        )
+        const availableRoom = (rooms ?? []).find((r) => !bookedRoomIds.has(r.id))
+        const roomId: string | null = availableRoom?.id ?? null
 
         grid[section.id][day][slot] = {
           subjectId: bestSubjectId,
           teacherId,
-          roomId: null,
+          roomId,
           isFixed: false,
           isCombined: false,
           combinedClassId: null,

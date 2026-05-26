@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { randomBytes } from 'crypto'
 import { addDays } from 'date-fns'
+import QRCode from 'qrcode'
 
 export async function GET(
   request: NextRequest,
@@ -44,5 +45,13 @@ export async function POST(request: NextRequest) {
     .single()
 
   const shareUrl = `${process.env.NEXT_PUBLIC_APP_URL}/share/${token}`
-  return NextResponse.json({ token, shareUrl, link })
+
+  // Generate QR code as base64 data URL
+  const qrDataUrl = await QRCode.toDataURL(shareUrl, {
+    width: 256,
+    margin: 2,
+    color: { dark: '#3A2A1E', light: '#FAF8F4' },
+  })
+
+  return NextResponse.json({ token, shareUrl, qrDataUrl, link })
 }

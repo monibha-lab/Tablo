@@ -1,8 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { Badge } from '@/components/ui/Badge'
-import { format } from 'date-fns'
+import { format, subMinutes } from 'date-fns'
 
 export default async function SubstitutionsPage() {
   const supabase = await createClient()
@@ -10,11 +11,21 @@ export default async function SubstitutionsPage() {
 
   if (!user || user.user_metadata?.role !== 'admin') redirect('/login')
 
+  const admin = createAdminClient()
+
   const { data: teacher } = await supabase
     .from('teachers')
     .select('*, schools(*)')
     .eq('user_id', user.id)
     .single()
+
+  // Lazy escalation: auto-escalate open requests older than 30 minutes
+  const thirtyMinutesAgo = subMinutes(new Date(), 30).toISOString()
+  await admin
+    .from('substitution_requests')
+    .update({ status: 'escalated' })
+    .eq('status', 'open')
+    .lt('created_at', thirtyMinutesAgo)
 
   const { data: requests } = await supabase
     .from('substitution_requests')

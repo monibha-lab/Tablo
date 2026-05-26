@@ -147,11 +147,15 @@ export function TimetableEditor({
         </div>
 
         <div className="flex gap-2">
-          <Button variant="secondary" size="sm">
-            <Undo2 className="h-4 w-4" /> Undo
-          </Button>
-          <Button variant="secondary" size="sm">
-            <FileDown className="h-4 w-4" /> Export
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              const url = `/api/export/pdf/${timetable.id}/${activeSection}`
+              window.open(url, '_blank')
+            }}
+          >
+            <FileDown className="h-4 w-4" /> Export PDF
           </Button>
           {!timetable.is_published && (
             <Button size="sm" onClick={handlePublish} loading={publishing}>
@@ -195,7 +199,7 @@ export function TimetableEditor({
         </div>
       )}
 
-      {/* Timetable grid */}
+      {/* Timetable grid — By Section */}
       {view === 'section' && (
         <div className="overflow-x-auto">
           <table className="w-full border-separate border-spacing-1.5">
@@ -203,9 +207,7 @@ export function TimetableEditor({
               <tr>
                 <th className="w-24 text-xs text-taupe font-medium text-left pb-2">Period</th>
                 {DAYS.map((day) => (
-                  <th key={day} className="text-xs text-taupe font-medium text-center pb-2">
-                    {day}
-                  </th>
+                  <th key={day} className="text-xs text-taupe font-medium text-center pb-2">{day}</th>
                 ))}
               </tr>
             </thead>
@@ -231,6 +233,114 @@ export function TimetableEditor({
                           onClick={() => !slot?.is_locked && openEdit(slot, day, period.slot_number)}
                           onContextMenu={(e) => { e.preventDefault(); openEdit(slot, day, period.slot_number) }}
                         />
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Timetable grid — By Teacher */}
+      {view === 'teacher' && (
+        <div className="overflow-x-auto">
+          <table className="w-full border-separate border-spacing-1.5">
+            <thead>
+              <tr>
+                <th className="w-32 text-xs text-taupe font-medium text-left pb-2">Teacher</th>
+                {DAYS.map((day) => (
+                  <th key={day} className="text-xs text-taupe font-medium text-center pb-2">{day}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {teachers.map((teacher) => (
+                <tr key={teacher.id}>
+                  <td className="align-top pr-2">
+                    <p className="text-xs font-medium text-espresso">{teacher.name}</p>
+                  </td>
+                  {DAYS.map((_, dayIdx) => {
+                    const day = dayIdx + 1
+                    const teacherSlots = slots.filter(
+                      (s) => s.teacher_id === teacher.id && s.day_of_week === day
+                    )
+                    return (
+                      <td key={day} className="align-top">
+                        <div className="space-y-1">
+                          {teacherSlots.length === 0 ? (
+                            <div className="h-10 rounded-lg bg-cream/40" />
+                          ) : (
+                            teacherSlots.map((slot) => (
+                              <div
+                                key={slot.id}
+                                className="rounded-lg bg-cream border border-sand/60 px-2 py-1.5 text-xs"
+                              >
+                                <p className="font-medium text-espresso truncate">
+                                  {getSubject(slot.subject_id)?.name ?? '—'}
+                                </p>
+                                <p className="text-taupe truncate">
+                                  {sections.find((s) => s.id === slot.section_id)?.name} · P{slot.slot_number}
+                                </p>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Timetable grid — By Room */}
+      {view === 'room' && (
+        <div className="overflow-x-auto">
+          <table className="w-full border-separate border-spacing-1.5">
+            <thead>
+              <tr>
+                <th className="w-32 text-xs text-taupe font-medium text-left pb-2">Room</th>
+                {DAYS.map((day) => (
+                  <th key={day} className="text-xs text-taupe font-medium text-center pb-2">{day}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rooms.map((room) => (
+                <tr key={room.id}>
+                  <td className="align-top pr-2">
+                    <p className="text-xs font-medium text-espresso">{room.name}</p>
+                  </td>
+                  {DAYS.map((_, dayIdx) => {
+                    const day = dayIdx + 1
+                    const roomSlots = slots.filter(
+                      (s) => s.room_id === room.id && s.day_of_week === day
+                    )
+                    return (
+                      <td key={day} className="align-top">
+                        <div className="space-y-1">
+                          {roomSlots.length === 0 ? (
+                            <div className="h-10 rounded-lg bg-cream/40" />
+                          ) : (
+                            roomSlots.map((slot) => (
+                              <div
+                                key={slot.id}
+                                className="rounded-lg bg-cream border border-sand/60 px-2 py-1.5 text-xs"
+                              >
+                                <p className="font-medium text-espresso truncate">
+                                  {getSubject(slot.subject_id)?.name ?? '—'}
+                                </p>
+                                <p className="text-taupe truncate">
+                                  {sections.find((s) => s.id === slot.section_id)?.name} · P{slot.slot_number}
+                                </p>
+                              </div>
+                            ))
+                          )}
+                        </div>
                       </td>
                     )
                   })}

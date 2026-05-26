@@ -80,30 +80,11 @@ export async function markAbsent(teacherId: string, date: string, reason?: strin
         }
       }
 
-      // Schedule escalation after 30 minutes via async (non-blocking)
-      scheduleEscalation(req.id, 30 * 60 * 1000)
+      // Escalation is handled lazily on the admin board (requests open > 30 min auto-escalate on page load)
     }
   }
 
   return { success: true }
-}
-
-function scheduleEscalation(requestId: string, delayMs: number) {
-  setTimeout(async () => {
-    const admin = createAdminClient()
-    const { data: req } = await admin
-      .from('substitution_requests')
-      .select('status')
-      .eq('id', requestId)
-      .single()
-
-    if (req?.status === 'open') {
-      await admin
-        .from('substitution_requests')
-        .update({ status: 'escalated' })
-        .eq('id', requestId)
-    }
-  }, delayMs)
 }
 
 export async function acceptSubstitution(requestId: string, substituteTeacherId: string) {
@@ -115,7 +96,7 @@ export async function acceptSubstitution(requestId: string, substituteTeacherId:
     .eq('id', requestId)
     .single()
 
-  if (req?.status !== 'open') return { error: 'Request is no longer available' }
+  if (!req || req.status === 'filled') return { error: 'Request is no longer available' }
 
   // Create assignment
   await admin.from('substitution_assignments').insert({
