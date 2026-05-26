@@ -3,7 +3,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- schools
 CREATE TABLE schools (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   logo_url text,
   created_at timestamptz DEFAULT now()
@@ -11,7 +11,7 @@ CREATE TABLE schools (
 
 -- terms
 CREATE TABLE terms (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id uuid NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   name text NOT NULL,
   start_date date NOT NULL,
@@ -22,7 +22,7 @@ CREATE TABLE terms (
 
 -- bell_schedules
 CREATE TABLE bell_schedules (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id uuid NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   school_start time NOT NULL,
   school_end time NOT NULL,
@@ -33,7 +33,7 @@ CREATE TABLE bell_schedules (
 
 -- period_slots
 CREATE TABLE period_slots (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   bell_schedule_id uuid NOT NULL REFERENCES bell_schedules(id) ON DELETE CASCADE,
   slot_number integer NOT NULL,
   label text NOT NULL,
@@ -46,7 +46,7 @@ CREATE TABLE period_slots (
 
 -- rooms
 CREATE TABLE rooms (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id uuid NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   name text NOT NULL,
   type text CHECK (type IN ('classroom','lab','sports','library','auditorium','other')) DEFAULT 'classroom',
@@ -55,7 +55,7 @@ CREATE TABLE rooms (
 
 -- teachers
 CREATE TABLE teachers (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   school_id uuid NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   name text NOT NULL,
@@ -71,7 +71,7 @@ CREATE TABLE teachers (
 
 -- subjects
 CREATE TABLE subjects (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id uuid NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   name text NOT NULL,
   type text CHECK (type IN ('academic','lab','sports','elective','homeroom')) DEFAULT 'academic',
@@ -80,7 +80,7 @@ CREATE TABLE subjects (
 
 -- grades
 CREATE TABLE grades (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id uuid NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   name text NOT NULL,
   order_index integer NOT NULL DEFAULT 0
@@ -88,7 +88,7 @@ CREATE TABLE grades (
 
 -- sections
 CREATE TABLE sections (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   grade_id uuid NOT NULL REFERENCES grades(id) ON DELETE CASCADE,
   name text NOT NULL,
   class_teacher_id uuid REFERENCES teachers(id) ON DELETE SET NULL,
@@ -97,7 +97,7 @@ CREATE TABLE sections (
 
 -- teacher_subjects
 CREATE TABLE teacher_subjects (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   teacher_id uuid NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
   subject_id uuid NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
   grade_id uuid NOT NULL REFERENCES grades(id) ON DELETE CASCADE,
@@ -106,7 +106,7 @@ CREATE TABLE teacher_subjects (
 
 -- section_subjects
 CREATE TABLE section_subjects (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   section_id uuid NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
   subject_id uuid NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
   periods_per_week integer NOT NULL DEFAULT 1,
@@ -117,7 +117,7 @@ CREATE TABLE section_subjects (
 
 -- fixed_periods
 CREATE TABLE fixed_periods (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id uuid NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   applies_to text CHECK (applies_to IN ('section','grade','school')) NOT NULL,
   section_id uuid REFERENCES sections(id) ON DELETE CASCADE,
@@ -133,7 +133,7 @@ CREATE TABLE fixed_periods (
 
 -- combined_classes
 CREATE TABLE combined_classes (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id uuid NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   name text NOT NULL,
   room_id uuid REFERENCES rooms(id) ON DELETE SET NULL
@@ -141,7 +141,7 @@ CREATE TABLE combined_classes (
 
 -- combined_class_sections
 CREATE TABLE combined_class_sections (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   combined_class_id uuid NOT NULL REFERENCES combined_classes(id) ON DELETE CASCADE,
   section_id uuid NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
   UNIQUE(combined_class_id, section_id)
@@ -149,7 +149,7 @@ CREATE TABLE combined_class_sections (
 
 -- elective_blocks
 CREATE TABLE elective_blocks (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id uuid NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   name text NOT NULL,
   day_of_week integer NOT NULL,
@@ -158,7 +158,7 @@ CREATE TABLE elective_blocks (
 
 -- elective_offerings
 CREATE TABLE elective_offerings (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   elective_block_id uuid NOT NULL REFERENCES elective_blocks(id) ON DELETE CASCADE,
   subject_id uuid NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
   teacher_id uuid REFERENCES teachers(id) ON DELETE SET NULL,
@@ -167,7 +167,7 @@ CREATE TABLE elective_offerings (
 
 -- elective_enrollments
 CREATE TABLE elective_enrollments (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   elective_block_id uuid NOT NULL REFERENCES elective_blocks(id) ON DELETE CASCADE,
   section_id uuid NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
   offering_id uuid REFERENCES elective_offerings(id) ON DELETE SET NULL,
@@ -176,7 +176,7 @@ CREATE TABLE elective_enrollments (
 
 -- timetables
 CREATE TABLE timetables (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id uuid NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   term_id uuid NOT NULL REFERENCES terms(id) ON DELETE CASCADE,
   label text DEFAULT 'Timetable',
@@ -189,7 +189,7 @@ CREATE TABLE timetables (
 
 -- timetable_slots
 CREATE TABLE timetable_slots (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   timetable_id uuid NOT NULL REFERENCES timetables(id) ON DELETE CASCADE,
   section_id uuid NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
   day_of_week integer NOT NULL,
@@ -208,7 +208,7 @@ CREATE TABLE timetable_slots (
 
 -- teacher_absences
 CREATE TABLE teacher_absences (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   teacher_id uuid NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
   date date NOT NULL,
   reason text,
@@ -218,7 +218,7 @@ CREATE TABLE teacher_absences (
 
 -- substitution_requests
 CREATE TABLE substitution_requests (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   timetable_slot_id uuid NOT NULL REFERENCES timetable_slots(id) ON DELETE CASCADE,
   date date NOT NULL,
   absent_teacher_id uuid NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
@@ -229,7 +229,7 @@ CREATE TABLE substitution_requests (
 
 -- substitution_assignments
 CREATE TABLE substitution_assignments (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   request_id uuid NOT NULL REFERENCES substitution_requests(id) ON DELETE CASCADE,
   substitute_teacher_id uuid NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
   status text CHECK (status IN ('accepted','withdrawn')) NOT NULL,
@@ -239,7 +239,7 @@ CREATE TABLE substitution_assignments (
 
 -- period_unavailabilities
 CREATE TABLE period_unavailabilities (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   teacher_id uuid NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
   timetable_slot_id uuid NOT NULL REFERENCES timetable_slots(id) ON DELETE CASCADE,
   date date NOT NULL,
@@ -250,7 +250,7 @@ CREATE TABLE period_unavailabilities (
 
 -- admin_events
 CREATE TABLE admin_events (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id uuid NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   title text NOT NULL,
   date date NOT NULL,
@@ -265,14 +265,14 @@ CREATE TABLE admin_events (
 
 -- admin_event_sections
 CREATE TABLE admin_event_sections (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   event_id uuid NOT NULL REFERENCES admin_events(id) ON DELETE CASCADE,
   section_id uuid NOT NULL REFERENCES sections(id) ON DELETE CASCADE
 );
 
 -- notifications
 CREATE TABLE notifications (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   type text NOT NULL,
   title text NOT NULL,
@@ -284,7 +284,7 @@ CREATE TABLE notifications (
 
 -- push_subscriptions
 CREATE TABLE push_subscriptions (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   endpoint text UNIQUE NOT NULL,
   p256dh text NOT NULL,
@@ -294,7 +294,7 @@ CREATE TABLE push_subscriptions (
 
 -- timetable_edits
 CREATE TABLE timetable_edits (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   timetable_id uuid NOT NULL REFERENCES timetables(id) ON DELETE CASCADE,
   slot_id uuid NOT NULL REFERENCES timetable_slots(id) ON DELETE CASCADE,
   changed_by uuid NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
@@ -306,7 +306,7 @@ CREATE TABLE timetable_edits (
 
 -- timetable_snapshots
 CREATE TABLE timetable_snapshots (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   timetable_id uuid NOT NULL REFERENCES timetables(id) ON DELETE CASCADE,
   snapshot_data jsonb NOT NULL,
   label text,
@@ -315,7 +315,7 @@ CREATE TABLE timetable_snapshots (
 
 -- share_links
 CREATE TABLE share_links (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   token text UNIQUE NOT NULL,
   section_id uuid NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
   timetable_id uuid NOT NULL REFERENCES timetables(id) ON DELETE CASCADE,
@@ -325,7 +325,7 @@ CREATE TABLE share_links (
 
 -- holidays
 CREATE TABLE holidays (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id uuid NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   date date NOT NULL,
   name text,
