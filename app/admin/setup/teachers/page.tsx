@@ -16,7 +16,7 @@ export default async function TeachersPage() {
 
   const schoolId = teacher?.school_id
 
-  const [{ data: teachers }, { data: subjects }, { data: grades }] = await Promise.all([
+  const [{ data: teachers }, { data: subjects }, { data: grades }, { data: sections }] = await Promise.all([
     supabase
       .from('teachers')
       .select('id, name, email, username, is_active, max_periods_per_day, teacher_subjects(subject_id, grade_id)')
@@ -24,6 +24,7 @@ export default async function TeachersPage() {
       .order('name'),
     supabase.from('subjects').select('*').eq('school_id', schoolId),
     supabase.from('grades').select('*').eq('school_id', schoolId).order('order_index'),
+    supabase.from('sections').select('id, name, grade_id').order('name'),
   ])
 
   return (
@@ -36,6 +37,7 @@ export default async function TeachersPage() {
         teachers={teachers ?? []}
         subjects={subjects ?? []}
         grades={grades ?? []}
+        sections={sections ?? []}
         schoolId={schoolId ?? ''}
       />
     </AppLayout>

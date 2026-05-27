@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   }
 
   // 2. Insert teacher record
-  const { error: dbError } = await admin.from('teachers').insert({
+  const { data: teacherRecord, error: dbError } = await admin.from('teachers').insert({
     school_id: schoolId,
     user_id: authUser.user.id,
     name,
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     email,
     max_periods_per_day: maxPeriods ?? 6,
     is_active: true,
-  })
+  }).select('id').single()
 
   if (dbError) {
     // Rollback auth user
@@ -47,5 +47,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: dbError.message }, { status: 400 })
   }
 
-  return NextResponse.json({ ok: true, username })
+  return NextResponse.json({ ok: true, username, teacherId: teacherRecord?.id })
 }

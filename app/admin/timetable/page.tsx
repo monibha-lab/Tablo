@@ -17,6 +17,9 @@ export default async function TimetablePage() {
 
   const schoolId = teacher?.school_id
 
+  // Guard: if no school set up, send to wizard
+  if (!schoolId) redirect('/admin/setup')
+
   const [{ data: timetables }, { data: terms }] = await Promise.all([
     supabase
       .from('timetables')

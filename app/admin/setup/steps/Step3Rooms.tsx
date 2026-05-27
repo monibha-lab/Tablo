@@ -6,12 +6,17 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { useWizardStore } from '@/lib/store/wizard-store'
+import { createClient } from '@/lib/supabase/client'
 
 const ROOM_TYPES = ['classroom', 'lab', 'sports', 'library', 'auditorium', 'other']
 
 export function Step3Rooms() {
-  const { rooms, setRooms, setStep } = useWizardStore()
+  const { rooms, setRooms, schoolId, setStep } = useWizardStore()
   const [localRooms, setLocalRooms] = useState(rooms)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const supabase = createClient()
 
   function addRoom() {
     setLocalRooms((r) => [
@@ -28,8 +33,39 @@ export function Step3Rooms() {
     setLocalRooms((r) => r.filter((_, i) => i !== idx))
   }
 
-  function handleNext() {
-    setRooms(localRooms.filter((r) => r.name.trim()))
+  async function handleNext() {
+    const filtered = localRooms.filter((r) => r.name.trim())
+    setRooms(filtered)
+
+    if (!schoolId) {
+      setStep(4)
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+
+    try {
+      // Replace existing rooms with current list
+      await supabase.from('rooms').delete().eq('school_id', schoolId)
+
+      if (filtered.length > 0) {
+        await supabase.from('rooms').insert(
+          filtered.map((r) => ({
+            school_id: schoolId,
+            name: r.name,
+            type: r.type as 'classroom' | 'lab' | 'sports' | 'library' | 'auditorium' | 'other',
+            max_simultaneous_use: r.maxSimultaneousUse,
+          }))
+        )
+      }
+    } catch {
+      setError('Failed to save rooms. Please try again.')
+      setSaving(false)
+      return
+    }
+
+    setSaving(false)
     setStep(4)
   }
 
@@ -37,7 +73,7 @@ export function Step3Rooms() {
     <div className="space-y-8">
       <div>
         <h2 className="font-cormorant text-3xl font-semibold text-espresso mb-2">Rooms & Facilities</h2>
-        <p className="text-taupe">Add all rooms and facilities available for scheduling.</p>
+        <p className="text-taupe">Add all rooms and facilities available for scheduling. You can skip this and add rooms later.</p>
       </div>
 
       <div className="space-y-3">
@@ -84,9 +120,15 @@ export function Step3Rooms() {
         </Button>
       </div>
 
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+
       <div className="flex justify-between">
         <Button variant="secondary" onClick={() => setStep(2)}>Back</Button>
-        <Button onClick={handleNext}>Continue</Button>
+        <Button onClick={handleNext} loading={saving}>Continue</Button>
       </div>
     </div>
   )

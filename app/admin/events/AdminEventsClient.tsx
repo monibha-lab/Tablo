@@ -62,6 +62,13 @@ export function AdminEventsClient({ events, grades, sections, schoolId }: AdminE
     if (!title || !date) return
     setSaving(true)
 
+    // Validate grade selection when applies_to is 'grade'
+    if (appliesTo === 'grade' && !gradeId) {
+      toast({ variant: 'error', title: 'Please select a grade' })
+      setSaving(false)
+      return
+    }
+
     const { error } = await supabase.from('admin_events').insert({
       school_id: schoolId,
       title,
@@ -71,7 +78,7 @@ export function AdminEventsClient({ events, grades, sections, schoolId }: AdminE
       end_slot: isHoliday ? null : endSlot,
       location: location || null,
       applies_to: appliesTo,
-      grade_id: appliesTo === 'grade' ? gradeId : null,
+      grade_id: appliesTo === 'grade' && gradeId ? gradeId : null,
       section_ids: appliesTo === 'grade' && selectedSectionIds.length > 0 ? selectedSectionIds : null,
     })
 

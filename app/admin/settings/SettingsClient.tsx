@@ -3,15 +3,25 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
-import { Plus, CheckCircle2, Circle } from 'lucide-react'
+import { Plus, CheckCircle2, Circle, RefreshCw, Check, Copy } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/hooks/useToast'
 import type { Term, TimetableSnapshot } from '@/types'
+
+interface SettingsTeacher {
+  id: string
+  name: string
+  username: string | null
+  email: string | null
+  is_active: boolean
+  user_id: string | null
+}
 
 interface SettingsClientProps {
   school: { id: string; name: string; logo_url: string | null } | null
   terms: Term[]
   snapshots: (TimetableSnapshot & { timetables: { label: string } | null })[]
+  teachers: SettingsTeacher[]
 }
 
 const mono:  React.CSSProperties = { fontFamily: 'var(--font-mono)' }
@@ -53,7 +63,7 @@ function FieldInput({ label, ...props }: { label: string } & React.InputHTMLAttr
   )
 }
 
-export function SettingsClient({ school, terms, snapshots }: SettingsClientProps) {
+export function SettingsClient({ school, terms, snapshots, teachers }: SettingsClientProps) {
   const [schoolName, setSchoolName] = useState(school?.name ?? '')
   const [saving, setSaving] = useState(false)
   const [newTermName, setNewTermName] = useState('')
@@ -62,6 +72,11 @@ export function SettingsClient({ school, terms, snapshots }: SettingsClientProps
   const [addingTerm, setAddingTerm] = useState(false)
   const [showAddTerm, setShowAddTerm] = useState(false)
 
+  // Reset PIN state
+  const [resettingPinFor, setResettingPinFor] = useState<string | null>(null)
+  const [resetPinResult, setResetPinResult] = useState<{ teacherId: string; name: string; pin: string } | null>(null)
+  const [pinCopied, setPinCopied] = useState(false)
+
   const supabase = createClient()
   const { toast } = useToast()
   const router = useRouter()
@@ -69,19 +84,22 @@ export function SettingsClient({ school, terms, snapshots }: SettingsClientProps
   async function saveSchoolName() {
     if (!school?.id) return
     setSaving(true)
-    await supabase.from('schools').update({ name: schoolName }).eq('id', school.id)
-    toast({ variant: 'success', title: 'School name updated' })
+    const { error } = await supabase.from('schools').update({ name: schoolName }).eq('id', school.id)
+    if (error) {
+      toast({ variant: 'error', title: 'Failed to save' })
+    } else {
+      toast({ variant: 'success', title: 'School name updated' })
+      router.refresh()
+    }
     setSaving(false)
-    router.refresh()
   }
 
   async function addTerm() {
     if (!school?.id || !newTermName || !newTermStart || !newTermEnd) return
     setAddingTerm(true)
 
-    // First term is automatically active
     const isFirst = terms.length === 0
-    await supabase.from('terms').insert({
+    const { error } = await supabase.from('terms').insert({
       school_id: school.id,
       name: newTermName,
       start_date: newTermStart,
@@ -89,13 +107,17 @@ export function SettingsClient({ school, terms, snapshots }: SettingsClientProps
       is_active: isFirst,
     })
 
-    toast({ variant: 'success', title: `Term "${newTermName}" created` })
-    setNewTermName('')
-    setNewTermStart('')
-    setNewTermEnd('')
+    if (error) {
+      toast({ variant: 'error', title: 'Failed to add term' })
+    } else {
+      toast({ variant: 'success', title: `Term "${newTermName}" created` })
+      setNewTermName('')
+      setNewTermStart('')
+      setNewTermEnd('')
+      setShowAddTerm(false)
+      router.refresh()
+    }
     setAddingTerm(false)
-    setShowAddTerm(false)
-    router.refresh()
   }
 
   async function setActiveTerm(termId: string) {
@@ -112,6 +134,34 @@ export function SettingsClient({ school, terms, snapshots }: SettingsClientProps
     router.refresh()
   }
 
+  async function handleResetPin(teacher: SettingsTeacher) {
+    setResettingPinFor(teacher.id)
+
+    const res = await fetch('/api/admin/reset-teacher-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ teacherId: teacher.id }),
+    })
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      toast({ variant: 'error', title: data.error ?? 'Failed to reset PIN' })
+    } else {
+      setResetPinResult({ teacherId: teacher.id, name: teacher.name, pin: data.pin })
+    }
+    setResettingPinFor(null)
+  }
+
+  function copyPin() {
+    if (!resetPinResult) return
+    navigator.clipboard.writeText(
+      `Username: ${teachers.find(t => t.id === resetPinResult.teacherId)?.username ?? resetPinResult.name}\nNew PIN: ${resetPinResult.pin}`
+    )
+    setPinCopied(true)
+    setTimeout(() => setPinCopied(false), 2000)
+  }
+
   return (
     <div className="max-w-2xl">
       {/* Header */}
@@ -125,7 +175,7 @@ export function SettingsClient({ school, terms, snapshots }: SettingsClientProps
       </div>
 
       <div className="space-y-5">
-        {/* ── School Profile ────────────────────────── */}
+        {/* ── School Profile ────────────────────────────── */}
         <Section title="School Profile">
           <div className="space-y-4">
             <FieldInput
@@ -258,7 +308,92 @@ export function SettingsClient({ school, terms, snapshots }: SettingsClientProps
           )}
         </Section>
 
-        {/* ── Timetable Snapshots ──────────────────── */}
+        {/* ── Access & Accounts ──────────────────────── */}
+        <Section title="Access & Accounts">
+          {/* Reset PIN result banner */}
+          {resetPinResult && (
+            <div
+              className="flex items-center justify-between px-4 py-3 rounded-xl mb-4"
+              style={{ backgroundColor: 'rgba(107,123,92,0.08)', border: '0.5px solid rgba(107,123,92,0.2)' }}
+            >
+              <div>
+                <p className="text-xs font-medium" style={{ color: 'var(--color-brand-success)' }}>
+                  PIN reset for {resetPinResult.name}
+                </p>
+                <p className="text-sm font-bold tracking-[0.2em] mt-0.5" style={{ ...mono, color: 'var(--color-brand-mocha)' }}>
+                  {resetPinResult.pin}
+                </p>
+              </div>
+              <button
+                onClick={copyPin}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] uppercase tracking-widest transition-opacity hover:opacity-70"
+                style={{ ...mono, border: '0.5px solid rgba(107,123,92,0.3)', color: 'var(--color-brand-success)' }}
+              >
+                {pinCopied ? <><Check className="h-3 w-3" />Copied</> : <><Copy className="h-3 w-3" />Copy</>}
+              </button>
+            </div>
+          )}
+
+          {teachers.length === 0 ? (
+            <p className="text-sm" style={{ ...mono, color: 'var(--color-brand-taupe)', opacity: 0.7 }}>
+              No teachers registered yet.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {teachers.map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-center justify-between px-4 py-3 rounded-xl"
+                  style={{ backgroundColor: 'var(--color-brand-cream)', border: '0.5px solid var(--color-brand-sand)' }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                      style={{ backgroundColor: t.is_active ? 'var(--color-brand-mocha)' : 'var(--color-brand-sand)', color: 'var(--color-brand-linen)' }}
+                    >
+                      {t.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium" style={{ color: 'var(--color-brand-mocha)' }}>{t.name}</p>
+                      <p className="text-[10px] mt-0.5" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
+                        {t.username ? `@${t.username}` : 'no username'}
+                        {!t.user_id && ' · no login account'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="px-2 py-0.5 rounded-full text-[10px] uppercase tracking-widest"
+                      style={{
+                        ...mono,
+                        backgroundColor: t.is_active ? 'rgba(107,123,92,0.12)' : 'rgba(60,53,48,0.07)',
+                        color: t.is_active ? 'var(--color-brand-success)' : 'var(--color-brand-taupe)',
+                      }}
+                    >
+                      {t.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                    {t.user_id && (
+                      <button
+                        onClick={() => handleResetPin(t)}
+                        disabled={resettingPinFor === t.id}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[10px] uppercase tracking-widest transition-opacity hover:opacity-70 disabled:opacity-40"
+                        style={{ ...mono, border: '0.5px solid var(--color-brand-sand)', color: 'var(--color-brand-taupe)' }}
+                      >
+                        <RefreshCw className={`h-3 w-3 ${resettingPinFor === t.id ? 'animate-spin' : ''}`} />
+                        {resettingPinFor === t.id ? 'Resetting…' : 'Reset PIN'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-[10px] mt-3" style={{ ...mono, color: 'var(--color-brand-taupe)', opacity: 0.6 }}>
+            Teachers log in at /login using their username and PIN. Reset PIN generates a new 6-digit password.
+          </p>
+        </Section>
+
+        {/* ── Timetable Snapshots ──────────────────────── */}
         <Section title="Timetable Snapshots">
           {snapshots.length === 0 ? (
             <p className="text-sm" style={{ ...mono, color: 'var(--color-brand-taupe)', opacity: 0.7 }}>

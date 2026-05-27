@@ -21,7 +21,6 @@ export default async function GradesPage() {
     supabase
       .from('sections')
       .select('*, teachers(name)')
-      .eq('school_id', schoolId)
       .order('name'),
     supabase
       .from('teachers')

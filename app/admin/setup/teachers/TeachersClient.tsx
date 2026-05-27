@@ -2,11 +2,14 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Edit2, UserX, Copy, Check, X, ChevronDown, ChevronUp } from 'lucide-react'
+import {
+  Plus, Edit2, UserX, Copy, Check, X, ChevronDown, ChevronUp,
+  RefreshCw, BookOpen
+} from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/hooks/useToast'
-import type { Teacher, Subject, Grade } from '@/types'
+import type { Teacher, Subject, Grade, Section } from '@/types'
 
 /* ─── types ─────────────────────────────────────────────── */
 
@@ -19,6 +22,7 @@ interface TeachersClientProps {
   teachers: TeacherWithSubjects[]
   subjects: Subject[]
   grades: Grade[]
+  sections: Section[]
   schoolId: string
 }
 
@@ -49,8 +53,9 @@ const serif: React.CSSProperties = { fontFamily: 'var(--font-serif)', fontStyle:
 
 /* ─── component ─────────────────────────────────────────── */
 
-export function TeachersClient({ teachers, subjects, grades, schoolId }: TeachersClientProps) {
+export function TeachersClient({ teachers, subjects, grades, sections, schoolId }: TeachersClientProps) {
   const [panelOpen, setPanelOpen] = useState(false)
+  const [panelMode, setPanelMode] = useState<'form' | 'subjects'>('form')
   const [editing, setEditing] = useState<TeacherWithSubjects | null>(null)
   const [deactivateId, setDeactivateId] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -61,9 +66,21 @@ export function TeachersClient({ teachers, subjects, grades, schoolId }: Teacher
   const [maxPeriods, setMaxPeriods] = useState(6)
   const [saving, setSaving] = useState(false)
 
+  // Subject assignment
+  const [subjGradeId, setSubjGradeId] = useState('')
+  const [subjSubjectId, setSubjSubjectId] = useState('')
+  const [subjSectionIds, setSubjSectionIds] = useState<string[]>([])
+  const [savingSubj, setSavingSubj] = useState(false)
+
   // Credential display after creation
   const [newCreds, setNewCreds] = useState<{ username: string; pin: string } | null>(null)
   const [copied, setCopied] = useState(false)
+
+  // Reset PIN state
+  const [resetPinTeacher, setResetPinTeacher] = useState<TeacherWithSubjects | null>(null)
+  const [newPin, setNewPin] = useState<string | null>(null)
+  const [resettingPin, setResettingPin] = useState(false)
+  const [pinCopied, setPinCopied] = useState(false)
 
   const supabase = createClient()
   const { toast } = useToast()
@@ -75,6 +92,7 @@ export function TeachersClient({ teachers, subjects, grades, schoolId }: Teacher
     setEmail('')
     setMaxPeriods(6)
     setNewCreds(null)
+    setPanelMode('form')
     setPanelOpen(true)
   }
 
@@ -84,12 +102,23 @@ export function TeachersClient({ teachers, subjects, grades, schoolId }: Teacher
     setEmail(t.email ?? '')
     setMaxPeriods(t.max_periods_per_day)
     setNewCreds(null)
+    setPanelMode('form')
+    setPanelOpen(true)
+  }
+
+  function openSubjects(t: TeacherWithSubjects) {
+    setEditing(t)
+    setSubjGradeId('')
+    setSubjSubjectId('')
+    setSubjSectionIds([])
+    setPanelMode('subjects')
     setPanelOpen(true)
   }
 
   function closePanel() {
     setPanelOpen(false)
     setNewCreds(null)
+    setNewPin(null)
     if (newCreds) router.refresh()
   }
 
@@ -107,15 +136,11 @@ export function TeachersClient({ teachers, subjects, grades, schoolId }: Teacher
       setPanelOpen(false)
       router.refresh()
     } else {
-      // Generate username + PIN
       const existingUsernames = teachers.map((t) => t.username ?? '').filter(Boolean)
       const username = generateUsername(name, existingUsernames)
       const pin = generatePin()
-
-      // Construct internal email
       const internalEmail = email.trim() || `${username}@school.tablo.internal`
 
-      // Create auth user with PIN as password via admin action
       const res = await fetch('/api/admin/create-teacher', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -144,11 +169,91 @@ export function TeachersClient({ teachers, subjects, grades, schoolId }: Teacher
     router.refresh()
   }
 
+  async function handleAddSubjectAssignment() {
+    if (!editing || !subjSubjectId || !subjGradeId) return
+    setSavingSubj(true)
+
+    if (subjSectionIds.length > 0) {
+      // Insert teacher_subject_sections for each selected section
+      const inserts = subjSectionIds.map((sectionId) => ({
+        school_id: schoolId,
+        teacher_id: editing.id,
+        subject_id: subjSubjectId,
+        section_id: sectionId,
+      }))
+      const { error } = await supabase.from('teacher_subject_sections').insert(inserts)
+      if (error) {
+        toast({ variant: 'error', title: 'Failed to assign subject' })
+      } else {
+        toast({ variant: 'success', title: 'Subject assigned' })
+        setSubjGradeId('')
+        setSubjSubjectId('')
+        setSubjSectionIds([])
+        router.refresh()
+      }
+    } else {
+      // Insert teacher_subjects (grade-level, no specific sections)
+      const { error } = await supabase.from('teacher_subjects').insert({
+        teacher_id: editing.id,
+        subject_id: subjSubjectId,
+        grade_id: subjGradeId,
+      })
+      if (error && !error.message.includes('unique')) {
+        toast({ variant: 'error', title: 'Failed to assign subject' })
+      } else {
+        toast({ variant: 'success', title: 'Subject assigned' })
+        setSubjGradeId('')
+        setSubjSubjectId('')
+        router.refresh()
+      }
+    }
+    setSavingSubj(false)
+  }
+
+  async function handleResetPin() {
+    if (!resetPinTeacher) return
+    setResettingPin(true)
+
+    const res = await fetch('/api/admin/reset-teacher-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ teacherId: resetPinTeacher.id }),
+    })
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      toast({ variant: 'error', title: data.error ?? 'Failed to reset PIN' })
+    } else {
+      setNewPin(data.pin)
+    }
+
+    setResettingPin(false)
+  }
+
   function copyCredentials() {
     if (!newCreds) return
     navigator.clipboard.writeText(`Username: ${newCreds.username}\nTemporary PIN: ${newCreds.pin}`)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  function copyNewPin() {
+    if (!newPin || !resetPinTeacher) return
+    navigator.clipboard.writeText(`Username: ${resetPinTeacher.username ?? resetPinTeacher.name}\nNew PIN: ${newPin}`)
+    setPinCopied(true)
+    setTimeout(() => setPinCopied(false), 2000)
+  }
+
+  const gradeSectionsForSubj = sections.filter((s) => {
+    const grade = grades.find((g) => g.id === subjGradeId)
+    return grade ? (s as Section & { grade_id?: string }).grade_id === grade.id : false
+  })
+
+  function toggleSectionForSubj(id: string) {
+    setSubjSectionIds((prev) =>
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
+    )
   }
 
   return (
@@ -244,14 +349,32 @@ export function TeachersClient({ teachers, subjects, grades, schoolId }: Teacher
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-1 justify-end" onClick={(e) => e.stopPropagation()}>
                         <button
+                          title="Assign subjects"
+                          className="p-1.5 rounded-full transition-opacity hover:opacity-70"
+                          style={{ color: 'var(--color-brand-taupe)' }}
+                          onClick={() => openSubjects(t)}
+                        >
+                          <BookOpen className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          title="Edit teacher"
                           className="p-1.5 rounded-full transition-opacity hover:opacity-70"
                           style={{ color: 'var(--color-brand-taupe)' }}
                           onClick={() => openEdit(t)}
                         >
                           <Edit2 className="h-3.5 w-3.5" />
                         </button>
+                        <button
+                          title="Reset PIN"
+                          className="p-1.5 rounded-full transition-opacity hover:opacity-70"
+                          style={{ color: 'var(--color-brand-taupe)' }}
+                          onClick={() => { setResetPinTeacher(t); setNewPin(null) }}
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </button>
                         {t.is_active && (
                           <button
+                            title="Deactivate"
                             className="p-1.5 rounded-full transition-opacity hover:opacity-70"
                             style={{ color: 'var(--color-brand-taupe)' }}
                             onClick={() => setDeactivateId(t.id)}
@@ -275,11 +398,14 @@ export function TeachersClient({ teachers, subjects, grades, schoolId }: Teacher
                           Assigned Subjects
                         </p>
                         {(t.teacher_subjects?.length ?? 0) === 0 ? (
-                          <p className="text-xs" style={{ ...mono, color: 'var(--color-brand-clay)' }}>No subjects assigned yet</p>
+                          <p className="text-xs" style={{ ...mono, color: 'var(--color-brand-clay)' }}>
+                            No subjects assigned — click <BookOpen className="h-3 w-3 inline" /> to assign
+                          </p>
                         ) : (
                           <div className="flex flex-wrap gap-2">
                             {t.teacher_subjects.map((ts, i) => {
                               const sub = subjects.find((s) => s.id === ts.subject_id)
+                              const grade = grades.find((g) => g.id === ts.grade_id)
                               return (
                                 <span
                                   key={i}
@@ -290,7 +416,7 @@ export function TeachersClient({ teachers, subjects, grades, schoolId }: Teacher
                                     color: 'var(--color-brand-mocha)',
                                   }}
                                 >
-                                  {sub?.name ?? ts.subject_id}
+                                  {sub?.name ?? '?'} · {grade?.name ?? '?'}
                                 </span>
                               )
                             })}
@@ -317,136 +443,323 @@ export function TeachersClient({ teachers, subjects, grades, schoolId }: Teacher
             {/* Panel header */}
             <div className="flex items-center justify-between px-6 py-5 border-b" style={{ borderColor: 'var(--color-brand-sand)' }}>
               <span className="text-sm font-medium" style={{ ...mono, color: 'var(--color-brand-mocha)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                {editing ? 'Edit Teacher' : 'Add Teacher'}
+                {panelMode === 'subjects'
+                  ? `Subjects — ${editing?.name}`
+                  : editing ? 'Edit Teacher' : 'Add Teacher'}
               </span>
               <button onClick={closePanel} className="p-1 rounded-full transition-opacity hover:opacity-70" style={{ color: 'var(--color-brand-taupe)' }}>
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Credentials display (shown after creation) */}
-            {newCreds ? (
-              <div className="flex-1 flex flex-col px-6 py-8 gap-6">
+            {/* ── Subject Assignment Panel ── */}
+            {panelMode === 'subjects' && editing && (
+              <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
+                <p className="text-xs" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
+                  Assign a subject + grade to this teacher. Optionally specify which sections.
+                </p>
+
+                {/* Current assignments */}
+                {(editing.teacher_subjects?.length ?? 0) > 0 && (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest mb-2" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
+                      Current Assignments
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {editing.teacher_subjects.map((ts, i) => {
+                        const sub = subjects.find((s) => s.id === ts.subject_id)
+                        const grade = grades.find((g) => g.id === ts.grade_id)
+                        return (
+                          <span
+                            key={i}
+                            className="px-2.5 py-1 rounded-full text-xs"
+                            style={{ ...mono, backgroundColor: 'rgba(60,53,48,0.07)', color: 'var(--color-brand-mocha)' }}
+                          >
+                            {sub?.name} · {grade?.name}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {subjects.length === 0 ? (
+                  <div
+                    className="rounded-xl p-4 text-center"
+                    style={{ backgroundColor: 'var(--color-brand-cream)', border: '0.5px solid var(--color-brand-sand)' }}
+                  >
+                    <p className="text-xs" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
+                      No subjects configured yet. Add subjects from Setup → Grades & Sections.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Subject selector */}
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest mb-1.5" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>Subject *</label>
+                      <select
+                        value={subjSubjectId}
+                        onChange={(e) => setSubjSubjectId(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                        style={{ backgroundColor: 'var(--color-brand-cream)', border: '0.5px solid var(--color-brand-sand)', color: 'var(--color-brand-mocha)' }}
+                      >
+                        <option value="">— Select subject —</option>
+                        {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Grade selector */}
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest mb-1.5" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>Grade *</label>
+                      <select
+                        value={subjGradeId}
+                        onChange={(e) => { setSubjGradeId(e.target.value); setSubjSectionIds([]) }}
+                        className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                        style={{ backgroundColor: 'var(--color-brand-cream)', border: '0.5px solid var(--color-brand-sand)', color: 'var(--color-brand-mocha)' }}
+                      >
+                        <option value="">— Select grade —</option>
+                        {grades.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Sections multi-select (optional) */}
+                    {subjGradeId && gradeSectionsForSubj.length > 0 && (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-[10px] uppercase tracking-widest" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
+                            Sections (optional)
+                          </label>
+                          <button
+                            onClick={() => setSubjSectionIds(gradeSectionsForSubj.map((s) => s.id))}
+                            className="text-[10px] uppercase tracking-widest transition-opacity hover:opacity-70"
+                            style={{ ...mono, color: 'var(--color-brand-clay)' }}
+                          >
+                            All
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {gradeSectionsForSubj.map((sec) => {
+                            const selected = subjSectionIds.includes(sec.id)
+                            return (
+                              <button
+                                key={sec.id}
+                                onClick={() => toggleSectionForSubj(sec.id)}
+                                className="px-3 py-1.5 rounded-full text-xs transition-all"
+                                style={{
+                                  ...mono,
+                                  backgroundColor: selected ? 'var(--color-brand-mocha)' : 'var(--color-brand-cream)',
+                                  color: selected ? 'var(--color-brand-linen)' : 'var(--color-brand-taupe)',
+                                  border: `0.5px solid ${selected ? 'var(--color-brand-mocha)' : 'var(--color-brand-sand)'}`,
+                                }}
+                              >
+                                {sec.name}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <p className="text-[10px] mt-1" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
+                          Leave empty to apply to all sections of this grade
+                        </p>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleAddSubjectAssignment}
+                      disabled={savingSubj || !subjSubjectId || !subjGradeId}
+                      className="w-full py-2.5 rounded-full text-[11px] uppercase tracking-widest font-bold transition-opacity hover:opacity-75 disabled:opacity-40"
+                      style={{ ...mono, backgroundColor: 'var(--color-brand-mocha)', color: 'var(--color-brand-linen)' }}
+                    >
+                      {savingSubj ? 'Assigning…' : 'Assign Subject'}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── Add/Edit Form Panel ── */}
+            {panelMode === 'form' && (
+              <>
+                {/* Credentials display (shown after creation) */}
+                {newCreds ? (
+                  <div className="flex-1 flex flex-col px-6 py-8 gap-6">
+                    <div>
+                      <div className="h-12 w-12 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: 'rgba(107,123,92,0.12)' }}>
+                        <Check className="h-5 w-5" style={{ color: 'var(--color-brand-success)' }} />
+                      </div>
+                      <h2 className="text-xl mb-1" style={{ ...serif, color: 'var(--color-brand-mocha)' }}>Teacher Created</h2>
+                      <p className="text-xs" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
+                        Share these credentials with the teacher. The PIN is their temporary password.
+                      </p>
+                    </div>
+
+                    <div
+                      className="rounded-xl p-5 space-y-3"
+                      style={{ backgroundColor: 'var(--color-brand-cream)', border: '0.5px solid var(--color-brand-sand)' }}
+                    >
+                      <div>
+                        <p className="text-[10px] uppercase tracking-widest mb-1" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>Username</p>
+                        <p className="text-sm font-bold" style={{ ...mono, color: 'var(--color-brand-mocha)' }}>{newCreds.username}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-widest mb-1" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>Temporary PIN</p>
+                        <p className="text-2xl font-bold tracking-[0.3em]" style={{ ...mono, color: 'var(--color-brand-mocha)' }}>{newCreds.pin}</p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={copyCredentials}
+                      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-full text-[11px] uppercase tracking-widest font-bold transition-opacity hover:opacity-75"
+                      style={{ ...mono, backgroundColor: 'var(--color-brand-mocha)', color: 'var(--color-brand-linen)' }}
+                    >
+                      {copied ? <><Check className="h-3.5 w-3.5" />Copied!</> : <><Copy className="h-3.5 w-3.5" />Copy Credentials</>}
+                    </button>
+                    <button
+                      onClick={closePanel}
+                      className="text-xs uppercase tracking-widest text-center transition-opacity hover:opacity-70"
+                      style={{ ...mono, color: 'var(--color-brand-taupe)' }}
+                    >
+                      Done
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-widest mb-1.5" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>Full Name *</label>
+                        <input
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          placeholder="e.g. Sarah Johnson"
+                          className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
+                          style={{ backgroundColor: 'var(--color-brand-cream)', border: '0.5px solid var(--color-brand-sand)', color: 'var(--color-brand-mocha)' }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-widest mb-1.5" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>Email (optional)</label>
+                        <input
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          type="email"
+                          placeholder="teacher@school.edu"
+                          className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
+                          style={{ backgroundColor: 'var(--color-brand-cream)', border: '0.5px solid var(--color-brand-sand)', color: 'var(--color-brand-mocha)' }}
+                        />
+                        {!editing && name && (
+                          <p className="text-[10px] mt-1.5" style={{ ...mono, color: 'var(--color-brand-clay)' }}>
+                            Username will be auto-generated from name
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-widest mb-1.5" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>Max Periods per Day</label>
+                        <input
+                          type="number"
+                          value={maxPeriods}
+                          onChange={(e) => setMaxPeriods(Number(e.target.value))}
+                          min={1}
+                          max={12}
+                          className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
+                          style={{ backgroundColor: 'var(--color-brand-cream)', border: '0.5px solid var(--color-brand-sand)', color: 'var(--color-brand-mocha)' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="px-6 py-5 border-t flex gap-2" style={{ borderColor: 'var(--color-brand-sand)' }}>
+                      <button
+                        onClick={closePanel}
+                        className="flex-1 py-2.5 rounded-full text-[11px] uppercase tracking-widest transition-opacity hover:opacity-70"
+                        style={{ ...mono, backgroundColor: 'var(--color-brand-cream)', color: 'var(--color-brand-taupe)', border: '0.5px solid var(--color-brand-sand)' }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSave}
+                        disabled={saving || !name.trim()}
+                        className="flex-1 py-2.5 rounded-full text-[11px] uppercase tracking-widest font-bold transition-opacity hover:opacity-75 disabled:opacity-40"
+                        style={{ ...mono, backgroundColor: 'var(--color-brand-mocha)', color: 'var(--color-brand-linen)' }}
+                      >
+                        {saving ? 'Saving…' : editing ? 'Save Changes' : 'Add Teacher'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── Reset PIN Modal ────────────────────────────── */}
+      {resetPinTeacher && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm" onClick={() => { setResetPinTeacher(null); setNewPin(null) }} />
+          <div
+            className="fixed inset-0 m-auto z-50 w-full max-w-sm h-fit rounded-2xl p-6"
+            style={{ backgroundColor: 'var(--color-brand-linen)', border: '0.5px solid var(--color-brand-sand)' }}
+          >
+            {newPin ? (
+              <div className="space-y-5">
                 <div>
-                  <div className="h-12 w-12 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: 'rgba(107,123,92,0.12)' }}>
+                  <div className="h-10 w-10 rounded-full flex items-center justify-center mb-3" style={{ backgroundColor: 'rgba(107,123,92,0.12)' }}>
                     <Check className="h-5 w-5" style={{ color: 'var(--color-brand-success)' }} />
                   </div>
-                  <h2 className="text-xl mb-1" style={{ ...serif, color: 'var(--color-brand-mocha)' }}>Teacher Created</h2>
+                  <p className="text-sm font-medium mb-1" style={{ color: 'var(--color-brand-mocha)' }}>
+                    PIN Reset for {resetPinTeacher.name}
+                  </p>
                   <p className="text-xs" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
-                    Share these credentials with the teacher. The PIN is their temporary password.
+                    Share this new PIN with the teacher
                   </p>
                 </div>
-
                 <div
-                  className="rounded-xl p-5 space-y-3"
+                  className="rounded-xl p-4 text-center"
                   style={{ backgroundColor: 'var(--color-brand-cream)', border: '0.5px solid var(--color-brand-sand)' }}
                 >
-                  <div>
-                    <p className="text-[10px] uppercase tracking-widest mb-1" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>Username</p>
-                    <p className="text-sm font-bold" style={{ ...mono, color: 'var(--color-brand-mocha)' }}>{newCreds.username}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-widest mb-1" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>Temporary PIN</p>
-                    <p className="text-2xl font-bold tracking-[0.3em]" style={{ ...mono, color: 'var(--color-brand-mocha)' }}>{newCreds.pin}</p>
-                  </div>
+                  <p className="text-[10px] uppercase tracking-widest mb-1" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>New PIN</p>
+                  <p className="text-3xl font-bold tracking-[0.3em]" style={{ ...mono, color: 'var(--color-brand-mocha)' }}>{newPin}</p>
                 </div>
-
                 <button
-                  onClick={copyCredentials}
-                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-full text-[11px] uppercase tracking-widest font-bold transition-opacity hover:opacity-75"
+                  onClick={copyNewPin}
+                  className="w-full py-2.5 rounded-full text-[11px] uppercase tracking-widest font-bold transition-opacity hover:opacity-75"
                   style={{ ...mono, backgroundColor: 'var(--color-brand-mocha)', color: 'var(--color-brand-linen)' }}
                 >
-                  {copied ? <><Check className="h-3.5 w-3.5" />Copied!</> : <><Copy className="h-3.5 w-3.5" />Copy Credentials</>}
+                  {pinCopied ? 'Copied!' : 'Copy PIN'}
                 </button>
                 <button
-                  onClick={closePanel}
-                  className="text-xs uppercase tracking-widest text-center transition-opacity hover:opacity-70"
+                  onClick={() => { setResetPinTeacher(null); setNewPin(null) }}
+                  className="w-full text-xs uppercase tracking-widest text-center transition-opacity hover:opacity-70"
                   style={{ ...mono, color: 'var(--color-brand-taupe)' }}
                 >
                   Done
                 </button>
               </div>
             ) : (
-              <>
-                {/* Form */}
-                <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-widest mb-1.5" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
-                      Full Name *
-                    </label>
-                    <input
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Sarah Johnson"
-                      className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
-                      style={{
-                        backgroundColor: 'var(--color-brand-cream)',
-                        border: '0.5px solid var(--color-brand-sand)',
-                        color: 'var(--color-brand-mocha)',
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-widest mb-1.5" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
-                      Email (optional)
-                    </label>
-                    <input
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      type="email"
-                      placeholder="teacher@school.edu"
-                      className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
-                      style={{
-                        backgroundColor: 'var(--color-brand-cream)',
-                        border: '0.5px solid var(--color-brand-sand)',
-                        color: 'var(--color-brand-mocha)',
-                      }}
-                    />
-                    {!editing && name && (
-                      <p className="text-[10px] mt-1.5" style={{ ...mono, color: 'var(--color-brand-clay)' }}>
-                        Username will be auto-generated from name
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-widest mb-1.5" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
-                      Max Periods per Day
-                    </label>
-                    <input
-                      type="number"
-                      value={maxPeriods}
-                      onChange={(e) => setMaxPeriods(Number(e.target.value))}
-                      min={1}
-                      max={12}
-                      className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
-                      style={{
-                        backgroundColor: 'var(--color-brand-cream)',
-                        border: '0.5px solid var(--color-brand-sand)',
-                        color: 'var(--color-brand-mocha)',
-                      }}
-                    />
-                  </div>
+              <div className="space-y-5">
+                <div>
+                  <p className="text-sm font-medium mb-1" style={{ color: 'var(--color-brand-mocha)' }}>
+                    Reset PIN for {resetPinTeacher.name}?
+                  </p>
+                  <p className="text-xs" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
+                    A new 6-digit PIN will be generated. The teacher&apos;s current PIN will stop working immediately.
+                  </p>
                 </div>
-
-                {/* Footer */}
-                <div className="px-6 py-5 border-t flex gap-2" style={{ borderColor: 'var(--color-brand-sand)' }}>
+                <div className="flex gap-2">
                   <button
-                    onClick={closePanel}
+                    onClick={() => setResetPinTeacher(null)}
                     className="flex-1 py-2.5 rounded-full text-[11px] uppercase tracking-widest transition-opacity hover:opacity-70"
-                    style={{ ...mono, backgroundColor: 'var(--color-brand-cream)', color: 'var(--color-brand-taupe)', border: '0.5px solid var(--color-brand-sand)' }}
+                    style={{ ...mono, border: '0.5px solid var(--color-brand-sand)', color: 'var(--color-brand-taupe)' }}
                   >
                     Cancel
                   </button>
                   <button
-                    onClick={handleSave}
-                    disabled={saving || !name.trim()}
+                    onClick={handleResetPin}
+                    disabled={resettingPin}
                     className="flex-1 py-2.5 rounded-full text-[11px] uppercase tracking-widest font-bold transition-opacity hover:opacity-75 disabled:opacity-40"
                     style={{ ...mono, backgroundColor: 'var(--color-brand-mocha)', color: 'var(--color-brand-linen)' }}
                   >
-                    {saving ? 'Saving…' : editing ? 'Save Changes' : 'Add Teacher'}
+                    {resettingPin ? 'Resetting…' : 'Reset PIN'}
                   </button>
                 </div>
-              </>
+              </div>
             )}
           </div>
         </>

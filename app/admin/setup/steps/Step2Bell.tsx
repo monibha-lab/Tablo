@@ -5,10 +5,15 @@ import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useWizardStore } from '@/lib/store/wizard-store'
+import { createClient } from '@/lib/supabase/client'
 
 export function Step2Bell() {
-  const { bellSchedule, setBellSchedule, setStep } = useWizardStore()
+  const { bellSchedule, setBellSchedule, setBellScheduleId, schoolId, setStep } = useWizardStore()
   const [schedule, setSchedule] = useState(bellSchedule)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const supabase = createClient()
 
   function addBreak() {
     setSchedule((s) => ({
@@ -28,8 +33,100 @@ export function Step2Bell() {
     }))
   }
 
-  function handleNext() {
+  async function handleNext() {
     setBellSchedule(schedule)
+
+    if (!schoolId) {
+      setStep(3)
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+
+    try {
+      // Delete existing bell schedule (period_slots cascade-delete)
+      const { data: existing } = await supabase
+        .from('bell_schedules')
+        .select('id')
+        .eq('school_id', schoolId)
+        .maybeSingle()
+
+      if (existing) {
+        await supabase.from('bell_schedules').delete().eq('id', existing.id)
+      }
+
+      // Insert new bell schedule
+      const { data: bs, error: bsError } = await supabase
+        .from('bell_schedules')
+        .insert({
+          school_id: schoolId,
+          school_start: schedule.schoolStart,
+          school_end: schedule.schoolEnd,
+          period_duration_minutes: schedule.periodDuration,
+          periods_per_day: schedule.periodsPerDay,
+        })
+        .select()
+        .single()
+
+      if (bsError || !bs) {
+        setError('Failed to save bell schedule. Please try again.')
+        setSaving(false)
+        return
+      }
+
+      setBellScheduleId(bs.id)
+
+      // Build period slots array (including breaks)
+      const slots: Array<{
+        bell_schedule_id: string
+        slot_number: number
+        label: string
+        start_time: string
+        end_time: string
+        is_break?: boolean
+      }> = []
+
+      let currentTime = schedule.schoolStart
+      for (let i = 1; i <= schedule.periodsPerDay; i++) {
+        const [h, m] = currentTime.split(':').map(Number)
+        const endMin = h * 60 + m + schedule.periodDuration
+        const endTime = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`
+
+        slots.push({
+          bell_schedule_id: bs.id,
+          slot_number: i,
+          label: `Period ${i}`,
+          start_time: currentTime,
+          end_time: endTime,
+        })
+
+        const breakAfter = schedule.breaks.find((b) => b.after === i)
+        if (breakAfter) {
+          const breakEnd = endMin + breakAfter.duration
+          const breakEndTime = `${String(Math.floor(breakEnd / 60)).padStart(2, '0')}:${String(breakEnd % 60).padStart(2, '0')}`
+          slots.push({
+            bell_schedule_id: bs.id,
+            slot_number: i + 0.5,
+            label: breakAfter.name,
+            start_time: endTime,
+            end_time: breakEndTime,
+            is_break: true,
+          })
+          currentTime = breakEndTime
+        } else {
+          currentTime = endTime
+        }
+      }
+
+      await supabase.from('period_slots').insert(slots)
+    } catch {
+      setError('Something went wrong. Please try again.')
+      setSaving(false)
+      return
+    }
+
+    setSaving(false)
     setStep(3)
   }
 
@@ -158,9 +255,15 @@ export function Step2Bell() {
         </div>
       </div>
 
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+
       <div className="flex justify-between">
         <Button variant="secondary" onClick={() => setStep(1)}>Back</Button>
-        <Button onClick={handleNext}>Continue</Button>
+        <Button onClick={handleNext} loading={saving}>Continue</Button>
       </div>
     </div>
   )

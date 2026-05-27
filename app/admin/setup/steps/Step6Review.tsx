@@ -17,6 +17,7 @@ export function Step6Review() {
   const supabase = createClient()
 
   const totalSections = grades.reduce((acc, g) => acc + g.sections.length, 0)
+  const totalSubjects = new Set(grades.flatMap((g) => g.subjects)).size
 
   async function handleFinish() {
     if (!schoolId) {
@@ -28,95 +29,7 @@ export function Step6Review() {
     setError(null)
 
     try {
-      // Create bell schedule
-      const { data: bs } = await supabase
-        .from('bell_schedules')
-        .insert({
-          school_id: schoolId,
-          school_start: bellSchedule.schoolStart,
-          school_end: bellSchedule.schoolEnd,
-          period_duration_minutes: bellSchedule.periodDuration,
-          periods_per_day: bellSchedule.periodsPerDay,
-        })
-        .select()
-        .single()
-
-      if (bs) {
-        // Create period slots
-        let currentTime = bellSchedule.schoolStart
-        for (let i = 1; i <= bellSchedule.periodsPerDay; i++) {
-          const [h, m] = currentTime.split(':').map(Number)
-          const endMin = h * 60 + m + bellSchedule.periodDuration
-          const endTime = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`
-          await supabase.from('period_slots').insert({
-            bell_schedule_id: bs.id,
-            slot_number: i,
-            label: `Period ${i}`,
-            start_time: currentTime,
-            end_time: endTime,
-          })
-          const breakAfter = bellSchedule.breaks.find((b) => b.after === i)
-          if (breakAfter) {
-            const breakEnd = endMin + breakAfter.duration
-            const breakEndTime = `${String(Math.floor(breakEnd / 60)).padStart(2, '0')}:${String(breakEnd % 60).padStart(2, '0')}`
-            await supabase.from('period_slots').insert({
-              bell_schedule_id: bs.id,
-              slot_number: i + 0.5,
-              label: breakAfter.name,
-              start_time: endTime,
-              end_time: breakEndTime,
-              is_break: true,
-            })
-            currentTime = breakEndTime
-          } else {
-            currentTime = endTime
-          }
-        }
-      }
-
-      // Create rooms
-      if (rooms.length > 0) {
-        await supabase.from('rooms').insert(
-          rooms.map((r) => ({
-            school_id: schoolId,
-            name: r.name,
-            type: r.type as 'classroom' | 'lab' | 'sports' | 'library' | 'auditorium' | 'other',
-            max_simultaneous_use: r.maxSimultaneousUse,
-          }))
-        )
-      }
-
-      // Create teachers
-      for (const t of teachers) {
-        await supabase.from('teachers').insert({
-          school_id: schoolId,
-          name: t.name,
-          email: t.email,
-          max_periods_per_day: t.maxPeriods,
-        })
-      }
-
-      // Create grades and sections
-      for (let gi = 0; gi < grades.length; gi++) {
-        const grade = grades[gi]
-        const { data: g } = await supabase
-          .from('grades')
-          .insert({ school_id: schoolId, name: grade.name, order_index: gi })
-          .select()
-          .single()
-
-        if (g) {
-          for (const section of grade.sections) {
-            await supabase.from('sections').insert({
-              grade_id: g.id,
-              name: section.name,
-              class_teacher_period_first: section.homeroomFirst,
-            })
-          }
-        }
-      }
-
-      // Create active term
+      // Create the default active term (everything else was saved per-step)
       const now = new Date()
       const { data: term } = await supabase
         .from('terms')
@@ -133,9 +46,8 @@ export function Step6Review() {
       if (term) setTermId(term.id)
 
       router.push('/admin/timetable')
-    } catch (e) {
+    } catch {
       setError('Something went wrong. Please try again.')
-      console.error(e)
     } finally {
       setSaving(false)
     }
@@ -160,6 +72,46 @@ export function Step6Review() {
             <p className="text-sm text-taupe mt-1">{stat.label}</p>
           </Card>
         ))}
+      </div>
+
+      {totalSubjects > 0 && (
+        <div className="rounded-xl px-5 py-4 bg-cream/50 border border-sand">
+          <p className="text-xs uppercase tracking-widest text-taupe mb-2" style={{ fontFamily: 'var(--font-mono)' }}>
+            Subjects configured
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {[...new Set(grades.flatMap((g) => g.subjects))].map((s) => (
+              <span
+                key={s}
+                className="px-2.5 py-1 rounded-full text-xs"
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  backgroundColor: 'rgba(181,169,159,0.2)',
+                  color: 'var(--color-brand-mocha)',
+                }}
+              >
+                {s}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-xl px-5 py-4 bg-cream/50 border border-sand">
+        <p className="text-xs uppercase tracking-widest text-taupe" style={{ fontFamily: 'var(--font-mono)' }}>
+          Bell schedule · {bellSchedule.periodsPerDay} periods/day · {bellSchedule.periodDuration} min each
+        </p>
+        <p className="text-xs text-taupe mt-1" style={{ fontFamily: 'var(--font-mono)' }}>
+          {bellSchedule.schoolStart} — {bellSchedule.schoolEnd}
+        </p>
+      </div>
+
+      <div className="rounded-xl px-5 py-4 bg-champagne/40 border border-sand">
+        <p className="text-sm font-medium text-espresso mb-1">A default term will be created</p>
+        <p className="text-xs text-taupe">
+          You can edit terms, add more grades, teachers, and subjects at any time from the Settings and Setup pages.
+          Timetable generation will use all the data you&apos;ve entered.
+        </p>
       </div>
 
       {error && (

@@ -17,13 +17,18 @@ export default async function SettingsPage() {
 
   const schoolId = teacher?.school_id
 
-  const [{ data: terms }, { data: snapshots }] = await Promise.all([
+  const [{ data: terms }, { data: snapshots }, { data: allTeachers }] = await Promise.all([
     supabase.from('terms').select('*').eq('school_id', schoolId).order('created_at', { ascending: false }),
     supabase
       .from('timetable_snapshots')
       .select('*, timetables(label)')
       .order('created_at', { ascending: false })
       .limit(20),
+    supabase
+      .from('teachers')
+      .select('id, name, username, email, is_active, user_id')
+      .eq('school_id', schoolId)
+      .order('name'),
   ])
 
   return (
@@ -36,6 +41,7 @@ export default async function SettingsPage() {
         school={(teacher?.schools as unknown as { id: string; name: string; logo_url: string | null }) ?? null}
         terms={terms ?? []}
         snapshots={snapshots ?? []}
+        teachers={allTeachers ?? []}
       />
     </AppLayout>
   )
