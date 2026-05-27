@@ -2,13 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Calendar, AlertTriangle, CheckCircle } from 'lucide-react'
+import { AlertTriangle, Sparkles, Eye, Trash2, CheckCircle2 } from 'lucide-react'
 import { format } from 'date-fns'
-import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
-import { Card } from '@/components/ui/Card'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
-import { Select } from '@/components/ui/Select'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/hooks/useToast'
 import type { Timetable, Term } from '@/types'
@@ -20,7 +16,6 @@ interface TimetableListProps {
 }
 
 export function TimetableList({ timetables, terms, schoolId }: TimetableListProps) {
-  const [selectedTermId, setSelectedTermId] = useState(terms[0]?.id ?? '')
   const [generating, setGenerating] = useState(false)
   const [conflicts, setConflicts] = useState<{ message: string; severity: string }[] | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
@@ -28,24 +23,29 @@ export function TimetableList({ timetables, terms, schoolId }: TimetableListProp
   const supabase = createClient()
   const { toast } = useToast()
 
+  // Use the first (most recent) active term automatically
+  const activeTerm = terms.find((t) => t.is_active) ?? terms[0]
+
   async function handleGenerate() {
-    if (!selectedTermId) return
+    if (!activeTerm) {
+      toast({ variant: 'error', title: 'No term configured. Go to Settings to create a term first.' })
+      return
+    }
     setGenerating(true)
     setConflicts(null)
 
-    // Create a new timetable record
     const { data: timetable, error } = await supabase
       .from('timetables')
       .insert({
         school_id: schoolId,
-        term_id: selectedTermId,
+        term_id: activeTerm.id,
         label: `Timetable — ${format(new Date(), 'MMM yyyy')}`,
       })
       .select()
       .single()
 
     if (error || !timetable) {
-      toast({ variant: 'error', title: 'Failed to create timetable' })
+      toast({ variant: 'error', title: 'Failed to create timetable record' })
       setGenerating(false)
       return
     }
@@ -53,18 +53,19 @@ export function TimetableList({ timetables, terms, schoolId }: TimetableListProp
     const res = await fetch('/api/generate-timetable', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ timetableId: timetable.id, schoolId, termId: selectedTermId }),
+      body: JSON.stringify({ timetableId: timetable.id, schoolId, termId: activeTerm.id }),
     })
 
     const data = await res.json()
 
     if (res.status === 422) {
       setConflicts(data.conflicts)
-      // Clean up the timetable record
       await supabase.from('timetables').delete().eq('id', timetable.id)
     } else if (data.status === 'success') {
-      toast({ variant: 'success', title: `Generated ${data.generated} slots` })
+      toast({ variant: 'success', title: `Generated ${data.generated} assignments` })
       router.refresh()
+    } else {
+      toast({ variant: 'error', title: data.error ?? 'Generation failed' })
     }
 
     setGenerating(false)
@@ -85,95 +86,182 @@ export function TimetableList({ timetables, terms, schoolId }: TimetableListProp
     router.refresh()
   }
 
+  const mono: React.CSSProperties = { fontFamily: 'var(--font-mono)' }
+  const serif: React.CSSProperties = { fontFamily: 'var(--font-serif)', fontStyle: 'italic' }
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-end gap-3">
-        <Select
-          label="Term"
-          value={selectedTermId}
-          onChange={(e) => setSelectedTermId(e.target.value)}
-          className="w-48"
+    <div className="space-y-8">
+
+      {/* ── Header row ─────────────────────────────────── */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl mb-1" style={{ ...serif, color: 'var(--color-brand-mocha)' }}>
+            Timetables
+          </h1>
+          {activeTerm ? (
+            <p className="text-xs uppercase tracking-widest" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
+              Active term: {activeTerm.name}
+            </p>
+          ) : (
+            <p className="text-xs uppercase tracking-widest" style={{ ...mono, color: 'var(--color-brand-error)' }}>
+              No active term — configure one in Settings
+            </p>
+          )}
+        </div>
+
+        <button
+          onClick={handleGenerate}
+          disabled={generating || !activeTerm}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[11px] uppercase tracking-widest font-bold transition-opacity disabled:opacity-40"
+          style={{
+            ...mono,
+            backgroundColor: 'var(--color-brand-mocha)',
+            color: 'var(--color-brand-linen)',
+          }}
         >
-          {terms.map((t) => (
-            <option key={t.id} value={t.id}>{t.name}</option>
-          ))}
-        </Select>
-        <Button onClick={handleGenerate} loading={generating}>
-          <Calendar className="h-4 w-4" /> Generate new timetable
-        </Button>
+          <Sparkles className={`h-3.5 w-3.5 ${generating ? 'animate-spin' : ''}`} />
+          {generating ? 'Generating…' : 'Generate New'}
+        </button>
       </div>
 
+      {/* ── Conflict report ─────────────────────────────── */}
       {conflicts && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+        <div
+          className="px-5 py-4 rounded-xl"
+          style={{
+            backgroundColor: 'rgba(182,109,109,0.06)',
+            border: '0.5px solid rgba(182,109,109,0.3)',
+          }}
+        >
           <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="h-4 w-4 text-red-600" />
-            <p className="text-sm font-medium text-red-700">Conflicts found — fix these before generating</p>
+            <AlertTriangle className="h-4 w-4" style={{ color: 'var(--color-brand-error)' }} />
+            <p className="text-sm font-medium" style={{ color: 'var(--color-brand-error)', ...mono }}>
+              Conflicts detected — resolve these before generating
+            </p>
           </div>
           <ul className="space-y-1">
             {conflicts.map((c, i) => (
-              <li key={i} className="text-sm text-red-600">• {c.message}</li>
+              <li key={i} className="text-sm" style={{ color: 'var(--color-brand-error)', ...mono, opacity: 0.85 }}>
+                · {c.message}
+              </li>
             ))}
           </ul>
         </div>
       )}
 
-      <div className="grid gap-4">
-        {timetables.length === 0 ? (
-          <div className="text-center py-16 text-taupe">
-            <Calendar className="h-10 w-10 mx-auto mb-3 opacity-40" />
-            <p>No timetables yet. Generate your first one.</p>
+      {/* ── Timetable list ──────────────────────────────── */}
+      {timetables.length === 0 ? (
+        <div
+          className="text-center py-20 rounded-2xl"
+          style={{ backgroundColor: 'var(--color-brand-cream)', border: '0.5px solid var(--color-brand-sand)' }}
+        >
+          <div
+            className="h-12 w-12 rounded-full flex items-center justify-center mx-auto mb-4 opacity-30"
+            style={{ backgroundColor: 'var(--color-brand-mocha)' }}
+          >
+            <Sparkles className="h-5 w-5" style={{ color: 'var(--color-brand-linen)' }} />
           </div>
-        ) : (
-          timetables.map((t) => (
-            <Card
+          <p className="text-sm" style={{ ...mono, color: 'var(--color-brand-taupe)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            No timetables yet
+          </p>
+          <p className="text-xs mt-1" style={{ color: 'var(--color-brand-clay)' }}>
+            Click Generate New to create your first timetable
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {timetables.map((t) => (
+            <div
               key={t.id}
-              title={t.label}
-              subtitle={(t.terms as unknown as { name: string })?.name ?? ''}
-              action={
-                <div className="flex gap-2">
-                  <Button size="sm" variant="secondary" onClick={() => router.push(`/admin/timetable/${t.id}`)}>
-                    View
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={t.is_published ? 'secondary' : 'primary'}
-                    onClick={() => handlePublish(t.id, t.is_published)}
-                  >
-                    {t.is_published ? 'Unpublish' : 'Publish'}
-                  </Button>
-                  <Button size="sm" variant="danger" onClick={() => setDeleteId(t.id)}>
-                    Delete
-                  </Button>
-                </div>
-              }
+              className="flex items-center justify-between px-5 py-4 rounded-xl transition-all"
+              style={{
+                backgroundColor: 'var(--color-brand-cream)',
+                border: '0.5px solid var(--color-brand-sand)',
+              }}
             >
-              <div className="flex items-center gap-3">
-                <Badge variant={t.is_published ? 'success' : 'default'}>
-                  {t.is_published ? 'Published' : 'Draft'}
-                </Badge>
-                {t.generated_at && (
-                  <span className="text-xs text-taupe">
-                    Generated {format(new Date(t.generated_at), 'MMM d, yyyy')}
+              {/* Left info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-3 mb-1">
+                  <span className="text-sm font-medium" style={{ color: 'var(--color-brand-mocha)' }}>
+                    {t.label}
                   </span>
-                )}
-                {t.is_published && t.published_at && (
-                  <span className="text-xs text-green-700 flex items-center gap-1">
-                    <CheckCircle className="h-3 w-3" />
-                    Published {format(new Date(t.published_at), 'MMM d')}
-                  </span>
-                )}
+                  {t.is_published ? (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-widest"
+                      style={{
+                        ...mono,
+                        backgroundColor: 'rgba(107,123,92,0.12)',
+                        color: 'var(--color-brand-success)',
+                      }}
+                    >
+                      <CheckCircle2 className="h-2.5 w-2.5" />
+                      Published
+                    </span>
+                  ) : (
+                    <span
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] uppercase tracking-widest"
+                      style={{
+                        ...mono,
+                        backgroundColor: 'rgba(60,53,48,0.07)',
+                        color: 'var(--color-brand-taupe)',
+                      }}
+                    >
+                      Draft
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
+                  {(t.terms as unknown as { name: string })?.name ?? 'No term'}
+                  {t.generated_at && ` · ${format(new Date(t.generated_at), 'MMM d, yyyy')}`}
+                </p>
               </div>
-            </Card>
-          ))
-        )}
-      </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2 ml-4">
+                <button
+                  onClick={() => router.push(`/admin/timetable/${t.id}`)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] uppercase tracking-widest transition-opacity hover:opacity-70"
+                  style={{
+                    ...mono,
+                    backgroundColor: 'var(--color-brand-champagne)',
+                    color: 'var(--color-brand-mocha)',
+                    border: '0.5px solid var(--color-brand-sand)',
+                  }}
+                >
+                  <Eye className="h-3 w-3" />
+                  View
+                </button>
+                <button
+                  onClick={() => handlePublish(t.id, t.is_published)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] uppercase tracking-widest transition-opacity hover:opacity-70"
+                  style={{
+                    ...mono,
+                    backgroundColor: t.is_published ? 'rgba(60,53,48,0.07)' : 'rgba(107,123,92,0.12)',
+                    color: t.is_published ? 'var(--color-brand-taupe)' : 'var(--color-brand-success)',
+                    border: '0.5px solid var(--color-brand-sand)',
+                  }}
+                >
+                  {t.is_published ? 'Unpublish' : 'Publish'}
+                </button>
+                <button
+                  onClick={() => setDeleteId(t.id)}
+                  className="p-1.5 rounded-full transition-opacity hover:opacity-70"
+                  style={{ color: 'var(--color-brand-taupe)' }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <ConfirmModal
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
         onConfirm={handleDelete}
         title="Delete timetable"
-        description="This will permanently delete the timetable and all its slots. This action cannot be undone."
+        description="This will permanently delete the timetable and all its assignments. This cannot be undone."
         confirmLabel="Delete"
         danger
       />

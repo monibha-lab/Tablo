@@ -3,15 +3,16 @@
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const signInSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  identifier: z.string().min(1, 'Username or email is required'),
+  password: z.string().min(1, 'Password is required'),
 })
 
 export async function signIn(formData: FormData) {
   const raw = {
-    email: formData.get('email') as string,
+    identifier: (formData.get('identifier') as string)?.trim(),
     password: formData.get('password') as string,
   }
 
@@ -20,8 +21,25 @@ export async function signIn(formData: FormData) {
     return { error: parsed.error.issues[0].message }
   }
 
+  const { identifier, password } = parsed.data
+  let email = identifier
+
+  // If not an email, look up the teacher's username to get their email
+  if (!identifier.includes('@')) {
+    const admin = createAdminClient()
+    const { data: teacher } = await admin
+      .from('teachers')
+      .select('email')
+      .eq('username', identifier)
+      .maybeSingle()
+    if (!teacher?.email) {
+      return { error: 'Invalid username or password' }
+    }
+    email = teacher.email
+  }
+
   const supabase = await createClient()
-  const { data, error } = await supabase.auth.signInWithPassword(parsed.data)
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
     return { error: 'Invalid email or password' }

@@ -20,9 +20,9 @@ export default async function EventsPage() {
   const [{ data: events }, { data: grades }, { data: sections }] = await Promise.all([
     supabase
       .from('admin_events')
-      .select('*')
+      .select('*, grade:grades(name)')
       .eq('school_id', schoolId)
-      .order('date', { ascending: false }),
+      .order('date', { ascending: true }),
     supabase.from('grades').select('*').eq('school_id', schoolId).order('order_index'),
     supabase
       .from('sections')

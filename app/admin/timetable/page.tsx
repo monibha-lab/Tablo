@@ -36,10 +36,6 @@ export default async function TimetablePage() {
       userName={teacher?.name}
       userRole="admin"
     >
-      <div className="mb-8">
-        <h1 className="font-cormorant text-4xl font-semibold text-espresso mb-2">Timetables</h1>
-        <p className="text-taupe">Manage and publish your school timetables.</p>
-      </div>
       <TimetableList
         timetables={timetables ?? []}
         terms={terms ?? []}

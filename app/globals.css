@@ -1,42 +1,101 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-ivory: #FAF8F4;
+  --font-serif: "Georgia", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+  --font-sans: "Helvetica Neue", "Arial", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Natural Tones Palette */
+  --color-brand-linen: #FAF9F6;
+  --color-brand-cream: #F5F2EF;
+  --color-brand-sand: #E6E2DD;
+  --color-brand-taupe: #8B7E74;
+  --color-brand-mocha: #3C3530;
+  --color-brand-clay: #B5A99F;
+  --color-brand-champagne: #F1EDE8;
+
+  --color-brand-success: #6B7B5C;
+  --color-brand-error: #B66D6D;
+  --color-brand-warning: #C69A6B;
+
+  /* Legacy aliases so existing Tailwind classes keep working */
+  --color-ivory: var(--color-brand-linen);
   --color-ivory-dark: #F3F0EA;
-  --color-cream: #F5F1E8;
+  --color-cream: var(--color-brand-cream);
   --color-cream-dark: #EDE8DC;
-  --color-sand: #E8E0D0;
+  --color-sand: var(--color-brand-sand);
   --color-sand-dark: #DDD4C0;
-  --color-nude: #D4C8B0;
-  --color-nude-dark: #C4B49A;
-  --color-taupe: #B8A898;
-  --color-taupe-dark: #A89880;
-  --color-clay: #9C8878;
-  --color-clay-dark: #8C7868;
-  --color-mocha: #5C4A3A;
-  --color-mocha-dark: #4A3828;
-  --color-espresso: #3A2A1E;
+  --color-taupe: var(--color-brand-taupe);
+  --color-clay: var(--color-brand-clay);
+  --color-mocha: var(--color-brand-mocha);
+  --color-espresso: var(--color-brand-mocha);
   --color-espresso-dark: #2C1E14;
-  --color-blush: #E8D8CC;
-  --color-champagne: #F0E4CC;
-
-  --font-cormorant: 'Cormorant Garamond', serif;
-  --font-sans: 'DM Sans', sans-serif;
-}
-
-:root {
-  --background: #FAF8F4;
-  --foreground: #3A2A1E;
+  --color-champagne: var(--color-brand-champagne);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background-color: var(--color-brand-linen);
+  color: var(--color-brand-mocha);
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3 {
-  font-family: var(--font-cormorant);
-  letter-spacing: -0.01em;
+/* ─── Utility Classes ─────────────────────────────────── */
+
+.paper-edge {
+  border: 0.5px solid rgba(60, 53, 48, 0.15) !important;
 }
+
+.soft-shadow {
+  box-shadow: 0 10px 40px -15px rgba(60, 53, 48, 0.08) !important;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-editorial-fade {
+  animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ─── Prototype Colour Overrides ─────────────────────── */
+/* Maps the design1-main arbitrary hex classes → theme tokens */
+
+.bg-\[\#FAF7F2\]  { background-color: var(--color-brand-linen)     !important; }
+.bg-\[\#FAF9F6\]  { background-color: var(--color-brand-linen)     !important; }
+.text-\[\#2C2421\]{ color: var(--color-brand-mocha)                !important; }
+.text-\[\#3C3530\]{ color: var(--color-brand-mocha)                !important; }
+.bg-\[\#2C2421\]  { background-color: var(--color-brand-mocha)     !important; }
+.border-\[\#FAF7F2\]\/20 { border-color: rgba(250,249,246,0.2)     !important; }
+.border-\[\#FAF7F2\]     { border-color: var(--color-brand-linen)  !important; }
+.bg-\[\#F4EFEB\]  { background-color: var(--color-brand-cream)     !important; }
+.bg-\[\#F5F2EF\]  { background-color: var(--color-brand-cream)     !important; }
+.border-\[\#E8DFD8\]     { border-color: var(--color-brand-sand)   !important; }
+.border-\[\#E8DFD8\]\/60 { border-color: rgba(230,226,221,0.6)     !important; }
+.border-\[\#E6E2DD\]     { border-color: var(--color-brand-sand)   !important; }
+.text-\[\#7A6F68\]{ color: var(--color-brand-taupe)                !important; }
+.text-\[\#8B7E74\]{ color: var(--color-brand-taupe)                !important; }
+.text-\[\#B68672\]{ color: var(--color-brand-clay)                 !important; }
+.text-\[\#B5A99F\]{ color: var(--color-brand-clay)                 !important; }
+.bg-\[\#B68672\]  { background-color: var(--color-brand-clay)      !important; }
+.bg-\[\#B68672\]\/5  { background-color: rgba(181,169,159,0.05)    !important; }
+.bg-\[\#B68672\]\/30 { background-color: rgba(181,169,159,0.3)     !important; }
+.selection\:bg-\[\#B68672\]\/30::selection { background-color: rgba(181,169,159,0.25) !important; }
+.selection\:text-\[\#2C2421\]::selection   { color: var(--color-brand-mocha)          !important; }
+.bg-\[\#2C2421\]\/10 { background-color: rgba(60,53,48,0.08)       !important; }
+.bg-\[\#2C2421\]\/15 { background-color: rgba(60,53,48,0.15)       !important; }
+.bg-\[\#FAF7F2\]\/50 { background-color: rgba(250,249,246,0.5)     !important; }
+.hover\:bg-\[\#FAF7F2\]\/40:hover { background-color: rgba(250,249,246,0.4) !important; }
+.bg-\[#F1EDE8\]  { background-color: var(--color-brand-champagne)  !important; }
+.bg-\[#DED9D2\]  { background-color: #DED9D2 !important; }
+.bg-\[#C8C2BC\]  { background-color: #C8C2BC !important; }
+.border-b-\[\#E8DFD8\]\/60 { border-bottom-color: rgba(230,226,221,0.6) !important; }
+
+/* ─── Scrollbar ──────────────────────────────────────── */
+
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-brand-linen); }
+::-webkit-scrollbar-thumb { background: var(--color-brand-sand); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-brand-taupe); }

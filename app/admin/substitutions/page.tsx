@@ -1,31 +1,18 @@
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { AppLayout } from '@/components/layout/AppLayout'
-import { Badge } from '@/components/ui/Badge'
-import { format, subMinutes } from 'date-fns'
+import { format } from 'date-fns'
 
 export default async function SubstitutionsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-
   if (!user || user.user_metadata?.role !== 'admin') redirect('/login')
-
-  const admin = createAdminClient()
 
   const { data: teacher } = await supabase
     .from('teachers')
     .select('*, schools(*)')
     .eq('user_id', user.id)
     .single()
-
-  // Lazy escalation: auto-escalate open requests older than 30 minutes
-  const thirtyMinutesAgo = subMinutes(new Date(), 30).toISOString()
-  await admin
-    .from('substitution_requests')
-    .update({ status: 'escalated' })
-    .eq('status', 'open')
-    .lt('created_at', thirtyMinutesAgo)
 
   const { data: requests } = await supabase
     .from('substitution_requests')
@@ -36,32 +23,40 @@ export default async function SubstitutionsPage() {
     `)
     .order('created_at', { ascending: false })
 
-  const byStatus = {
-    open: (requests ?? []).filter((r) => r.status === 'open'),
-    filled: (requests ?? []).filter((r) => r.status === 'filled'),
-    escalated: (requests ?? []).filter((r) => r.status === 'escalated'),
-  }
+  const open   = (requests ?? []).filter((r) => r.status === 'open')
+  const filled = (requests ?? []).filter((r) => r.status === 'filled')
 
-  const RequestCard = ({ req }: { req: (typeof requests)[0] }) => {
+  const mono: React.CSSProperties  = { fontFamily: 'var(--font-mono)' }
+  const serif: React.CSSProperties = { fontFamily: 'var(--font-serif)', fontStyle: 'italic' }
+
+  function RequestCard({ req }: { req: (typeof requests)[0] }) {
     const slot = req.timetable_slots as unknown as {
       slot_number: number
       subjects: { name: string } | null
       sections: { name: string; grades: { name: string } | null } | null
     }
     return (
-      <div className="bg-ivory border border-sand/60 rounded-xl p-4">
-        <p className="font-medium text-espresso text-sm">
+      <div
+        className="px-5 py-4 rounded-xl"
+        style={{ backgroundColor: 'var(--color-brand-cream)', border: '0.5px solid var(--color-brand-sand)' }}
+      >
+        <p className="text-sm font-medium mb-1" style={{ color: 'var(--color-brand-mocha)' }}>
           {slot?.subjects?.name ?? 'Unknown subject'}
         </p>
-        <p className="text-xs text-taupe mt-0.5">
-          Period {slot?.slot_number} • {slot?.sections?.grades?.name} {slot?.sections?.name}
+        <p className="text-xs" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
+          Period {slot?.slot_number}
+          {slot?.sections?.grades?.name ? ` · ${slot.sections.grades.name} ${slot.sections?.name}` : ''}
         </p>
-        <p className="text-xs text-taupe mt-1">{format(new Date(req.date), 'MMM d, yyyy')}</p>
-        <p className="text-xs text-clay mt-1">
+        <p className="text-xs mt-1" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
+          {format(new Date(req.date), 'MMM d, yyyy')}
+        </p>
+        <p className="text-xs mt-1" style={{ ...mono, color: 'var(--color-brand-clay)' }}>
           Absent: {(req.absent_teacher as unknown as { name: string })?.name}
         </p>
         {req.note_for_sub && (
-          <p className="text-xs text-taupe/70 mt-2 italic">&quot;{req.note_for_sub}&quot;</p>
+          <p className="text-xs mt-2 italic" style={{ color: 'var(--color-brand-taupe)', opacity: 0.7 }}>
+            &quot;{req.note_for_sub}&quot;
+          </p>
         )}
       </div>
     )
@@ -73,33 +68,79 @@ export default async function SubstitutionsPage() {
       userName={teacher?.name}
       userRole="admin"
     >
+      {/* Header */}
       <div className="mb-8">
-        <h1 className="font-cormorant text-4xl font-semibold text-espresso mb-2">Substitutions</h1>
-        <p className="text-taupe">Manage substitute teacher requests.</p>
+        <h1 className="text-3xl mb-1" style={{ ...serif, color: 'var(--color-brand-mocha)' }}>
+          Operations
+        </h1>
+        <p className="text-xs uppercase tracking-widest" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
+          Absences & Substitutions
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {(['open', 'filled', 'escalated'] as const).map((status) => (
-          <div key={status}>
-            <div className="flex items-center gap-2 mb-3">
-              <h2 className="font-medium text-espresso capitalize">{status}</h2>
-              <Badge
-                variant={status === 'filled' ? 'success' : status === 'escalated' ? 'danger' : 'default'}
-              >
-                {byStatus[status].length}
-              </Badge>
-            </div>
-            <div className="space-y-3">
-              {byStatus[status].length === 0 ? (
-                <p className="text-xs text-taupe text-center py-8 bg-cream/50 rounded-xl">
-                  No {status} requests
-                </p>
-              ) : (
-                byStatus[status].map((req) => <RequestCard key={req.id} req={req} />)
-              )}
-            </div>
+      {/* Two-column: open / filled */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Open */}
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="text-sm font-medium uppercase tracking-widest" style={{ ...mono, color: 'var(--color-brand-mocha)' }}>
+              Open
+            </h2>
+            <span
+              className="px-2 py-0.5 rounded-full text-[10px] uppercase tracking-widest"
+              style={{
+                ...mono,
+                backgroundColor: open.length > 0 ? 'rgba(198,154,107,0.15)' : 'rgba(60,53,48,0.07)',
+                color: open.length > 0 ? 'var(--color-brand-warning)' : 'var(--color-brand-taupe)',
+              }}
+            >
+              {open.length}
+            </span>
           </div>
-        ))}
+          <div className="space-y-3">
+            {open.length === 0 ? (
+              <div
+                className="text-center py-10 rounded-xl text-xs uppercase tracking-widest"
+                style={{ ...mono, color: 'var(--color-brand-taupe)', border: '0.5px dashed var(--color-brand-sand)' }}
+              >
+                No open requests
+              </div>
+            ) : (
+              open.map((req) => <RequestCard key={req.id} req={req} />)
+            )}
+          </div>
+        </div>
+
+        {/* Filled */}
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="text-sm font-medium uppercase tracking-widest" style={{ ...mono, color: 'var(--color-brand-mocha)' }}>
+              Filled
+            </h2>
+            <span
+              className="px-2 py-0.5 rounded-full text-[10px] uppercase tracking-widest"
+              style={{
+                ...mono,
+                backgroundColor: 'rgba(107,123,92,0.12)',
+                color: 'var(--color-brand-success)',
+              }}
+            >
+              {filled.length}
+            </span>
+          </div>
+          <div className="space-y-3">
+            {filled.length === 0 ? (
+              <div
+                className="text-center py-10 rounded-xl text-xs uppercase tracking-widest"
+                style={{ ...mono, color: 'var(--color-brand-taupe)', border: '0.5px dashed var(--color-brand-sand)' }}
+              >
+                No filled requests
+              </div>
+            ) : (
+              filled.map((req) => <RequestCard key={req.id} req={req} />)
+            )}
+          </div>
+        </div>
       </div>
     </AppLayout>
   )

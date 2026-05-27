@@ -15,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="h-full">
-      <body className="min-h-full flex flex-col bg-ivory text-espresso antialiased">
+      <body className="min-h-full flex flex-col antialiased" style={{ backgroundColor: 'var(--color-brand-linen)', color: 'var(--color-brand-mocha)' }}>
         {children}
         <ToastContainer />
         <PushRegistration />

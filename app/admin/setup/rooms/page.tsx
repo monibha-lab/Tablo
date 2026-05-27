@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { RoomsClient } from './RoomsClient'
 
-export default async function RoomsPage() {
+export default async function GradesPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user || user.user_metadata?.role !== 'admin') redirect('/login')
@@ -15,11 +15,21 @@ export default async function RoomsPage() {
     .single()
 
   const schoolId = teacher?.school_id
-  const { data: rooms } = await supabase
-    .from('rooms')
-    .select('*')
-    .eq('school_id', schoolId)
-    .order('name')
+
+  const [{ data: grades }, { data: sections }, { data: teachers }] = await Promise.all([
+    supabase.from('grades').select('*').eq('school_id', schoolId).order('order_index'),
+    supabase
+      .from('sections')
+      .select('*, teachers(name)')
+      .eq('school_id', schoolId)
+      .order('name'),
+    supabase
+      .from('teachers')
+      .select('id, name')
+      .eq('school_id', schoolId)
+      .eq('is_active', true)
+      .order('name'),
+  ])
 
   return (
     <AppLayout
@@ -27,7 +37,12 @@ export default async function RoomsPage() {
       userName={teacher?.name}
       userRole="admin"
     >
-      <RoomsClient rooms={rooms ?? []} schoolId={schoolId ?? ''} />
+      <RoomsClient
+        grades={grades ?? []}
+        sections={sections ?? []}
+        teachers={teachers ?? []}
+        schoolId={schoolId ?? ''}
+      />
     </AppLayout>
   )
 }

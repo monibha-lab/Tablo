@@ -10,45 +10,83 @@ import { Step5Grades } from './steps/Step5Grades'
 import { Step6Review } from './steps/Step6Review'
 
 const STEPS = [
-  'School Profile',
-  'Bell Schedule',
-  'Rooms',
-  'Teachers',
-  'Grades & Sections',
-  'Review',
+  { label: 'School', short: '01' },
+  { label: 'Bell',   short: '02' },
+  { label: 'Rooms',  short: '03' },
+  { label: 'Staff',  short: '04' },
+  { label: 'Grades', short: '05' },
+  { label: 'Review', short: '06' },
 ]
+
+const mono:  React.CSSProperties = { fontFamily: 'var(--font-mono)' }
+const serif: React.CSSProperties = { fontFamily: 'var(--font-serif)', fontStyle: 'italic' }
 
 export default function SetupPage() {
   const { step } = useWizardStore()
 
   return (
-    <div className="min-h-screen bg-ivory flex flex-col">
-      <div className="border-b border-sand/40 bg-ivory sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="font-cormorant text-2xl font-semibold text-espresso">School Setup</h1>
-            <span className="text-sm text-taupe">Step {step} of {STEPS.length}</span>
+    <div
+      className="min-h-screen flex flex-col"
+      style={{ backgroundColor: 'var(--color-brand-linen)', color: 'var(--color-brand-mocha)' }}
+    >
+      {/* ── Progress header ──────────────────────────── */}
+      <div
+        className="sticky top-0 z-10 border-b"
+        style={{ backgroundColor: 'var(--color-brand-linen)', borderColor: 'var(--color-brand-sand)' }}
+      >
+        <div className="max-w-2xl mx-auto px-6 py-5">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h1 className="text-2xl" style={{ ...serif, color: 'var(--color-brand-mocha)' }}>
+                Setup Wizard
+              </h1>
+              <p className="text-[10px] uppercase tracking-widest mt-0.5" style={{ ...mono, color: 'var(--color-brand-taupe)' }}>
+                Step {step} of {STEPS.length}
+              </p>
+            </div>
           </div>
-          <div className="flex gap-2">
-            {STEPS.map((label, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                <div
-                  className={`h-1.5 w-full rounded-full transition-colors ${
-                    i + 1 < step
-                      ? 'bg-mocha'
-                      : i + 1 === step
-                      ? 'bg-mocha/60'
-                      : 'bg-sand'
-                  }`}
-                />
-                <span className="text-[10px] text-taupe hidden sm:block">{label}</span>
-              </div>
-            ))}
+
+          {/* Step dots */}
+          <div className="flex items-center gap-2">
+            {STEPS.map((s, i) => {
+              const idx = i + 1
+              const past    = idx < step
+              const current = idx === step
+              return (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
+                  <div
+                    className="w-full h-[3px] rounded-full transition-all"
+                    style={{
+                      backgroundColor: past
+                        ? 'var(--color-brand-mocha)'
+                        : current
+                        ? 'rgba(60,53,48,0.4)'
+                        : 'var(--color-brand-sand)',
+                    }}
+                  />
+                  <span
+                    className="hidden sm:block text-[9px] uppercase tracking-widest"
+                    style={{
+                      ...mono,
+                      color: current
+                        ? 'var(--color-brand-mocha)'
+                        : past
+                        ? 'var(--color-brand-taupe)'
+                        : 'var(--color-brand-sand)',
+                      fontWeight: current ? 700 : 400,
+                    }}
+                  >
+                    {s.label}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>
 
-      <div className="flex-1 max-w-3xl mx-auto w-full px-6 py-10">
+      {/* ── Step content ─────────────────────────────── */}
+      <div className="flex-1 max-w-2xl mx-auto w-full px-6 py-10">
         {step === 1 && <Step1School />}
         {step === 2 && <Step2Bell />}
         {step === 3 && <Step3Rooms />}
